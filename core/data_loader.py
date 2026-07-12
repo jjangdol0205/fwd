@@ -20,7 +20,7 @@ from pathlib import Path
 
 def _parse_date_index(idx: pd.Index) -> pd.DatetimeIndex:
     """다양한 날짜 형식을 DatetimeIndex로 변환"""
-    return pd.to_datetime(idx, infer_datetime_format=True, errors="coerce")
+    return pd.to_datetime(idx, errors="coerce")
 
 
 def _clean_ticker(val: str) -> str:
