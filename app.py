@@ -149,27 +149,66 @@ def load_all_data(band_years):
     eps_path   = ROOT / "data" / "fwd_eps.xlsx"
     uni_path   = ROOT / "data" / "universe.csv"
 
-    if not (price_path.exists() and eps_path.exists()):
-        return None, None, None, None, []
+    # ── 실제 데이터 파일이 있으면 로드 ──────────────
+    if price_path.exists() and eps_path.exists():
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            price_hist = load_excel(str(price_path))
+            eps_df     = load_dataguide_eps(str(eps_path))
 
-    import warnings
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        price_hist = load_excel(str(price_path))
-        eps_df     = load_dataguide_eps(str(eps_path))
+        names, markets = {}, {}
+        if uni_path.exists():
+            uni     = pd.read_csv(str(uni_path), dtype=str)
+            names   = dict(zip(uni["ticker"], uni["name"]))
+            markets = dict(zip(uni["ticker"], uni["market"]))
 
+        common   = [t for t in eps_df.columns if t in price_hist.columns]
+        price_df = price_hist[common]
+        eps_df   = eps_df[common]
+        results  = run_screener(price_df, eps_df, names, band_years=band_years)
+        return price_df, eps_df, names, markets, results
+
+    # ── 데이터 없음 → 샘플 데이터 자동 생성 (Cloud 배포용) ──
+    return _make_sample_data(band_years)
+
+
+def _make_sample_data(band_years: int):
+    """Streamlit Cloud / 데이터 없는 환경용 샘플 데이터 생성"""
+    SAMPLE = [
+        ("005930","삼성전자","KOSPI200"), ("000660","SK하이닉스","KOSPI200"),
+        ("035420","NAVER","KOSPI200"),    ("005380","현대차","KOSPI200"),
+        ("051910","LG화학","KOSPI200"),   ("006400","삼성SDI","KOSPI200"),
+        ("000270","기아","KOSPI200"),     ("012330","현대모비스","KOSPI200"),
+        ("003550","LG","KOSPI200"),       ("034730","SK","KOSPI200"),
+        ("035900","JYP Ent.","KOSDAQ150"),("041510","에스엠","KOSDAQ150"),
+        ("263750","펄어비스","KOSDAQ150"),("293490","카카오게임즈","KOSDAQ150"),
+        ("145020","휴젤","KOSDAQ150"),
+    ]
+    np.random.seed(42)
+    dates_p = pd.date_range("2015-01-31", periods=12*band_years+12, freq="ME")
+    dates_e = pd.date_range("2010-01-31", periods=12*15+12, freq="ME")
+
+    price_data, eps_data = {}, {}
     names, markets = {}, {}
-    if uni_path.exists():
-        uni     = pd.read_csv(str(uni_path), dtype=str)
-        names   = dict(zip(uni["ticker"], uni["name"]))
-        markets = dict(zip(uni["ticker"], uni["market"]))
+    for ticker, name, mkt in SAMPLE:
+        base_p = np.random.uniform(30000, 200000)
+        trend  = np.random.uniform(0.995, 1.012)
+        noise  = np.random.normal(1, 0.06, len(dates_p))
+        prices = base_p * np.cumprod(trend * noise)
+        price_data[ticker] = pd.Series(prices, index=dates_p)
 
-    common   = [t for t in eps_df.columns if t in price_hist.columns]
-    price_df = price_hist[common]
-    eps_df   = eps_df[common]
+        base_e   = base_p / np.random.uniform(10, 25)
+        eps_vals = base_e * (1 + np.random.normal(0.005, 0.03, len(dates_e)))
+        eps_data[ticker] = pd.Series(np.maximum(eps_vals, 100), index=dates_e)
+        names[ticker]    = name
+        markets[ticker]  = mkt
 
-    results = run_screener(price_df, eps_df, names, band_years=band_years)
+    price_df = pd.DataFrame(price_data)
+    eps_df   = pd.DataFrame(eps_data)
+    results  = run_screener(price_df, eps_df, names, band_years=band_years)
     return price_df, eps_df, names, markets, results
+
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -243,6 +282,10 @@ with st.spinner("데이터 로드 중..."):
 if not all_results:
     st.error("data/price.xlsx 또는 data/fwd_eps.xlsx 파일이 없습니다.")
     st.stop()
+
+IS_SAMPLE = not (ROOT / "data" / "fwd_eps.xlsx").exists()
+if IS_SAMPLE:
+    st.info("⚠️ 실제 데이터 파일이 없어 **샘플 데이터 (데모 모드)**로 실행 중입니다. DataGuide에서 fwd_eps.xlsx와 price.xlsx를 data/ 폴더에 넣으면 실제 데이터가 로드됩니다.")
 
 eps_months = eps_df.shape[0]
 eps_start  = eps_df.index.min().strftime("%Y-%m")
