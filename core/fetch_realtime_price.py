@@ -22,78 +22,105 @@ def _latest_trading_date(offset: int = 0) -> str:
     return today.strftime("%Y%m%d")
 
 
-def get_current_prices(
-    tickers: list[str],
-    sleep_sec: float = 0.1,
-) -> pd.Series:
-    """
-    pykrx로 당일 종가(현재가) 일괄 조회
+def _fetch_market_ohlcv(krx, date: str, market: str) -> pd.DataFrame:
+    """pykrx 버전에 따라 다른 API 시그니처 처리"""
+    # 최신 pykrx: get_market_ohlcv(date, market=...)
+    # 구버전: get_market_ohlcv(date, date, market=...)
+    try:
+        return krx.get_market_ohlcv(date, date, market=market)
+    except TypeError:
+        pass
+    try:
+        return krx.get_market_ohlcv(date, market=market)
+    except TypeError:
+        pass
+    try:
+        return krx.get_market_ohlcv(date, date)
+    except Exception:
+        return pd.DataFrame()
 
-    장 마감 전이면 전일 종가, 마감 후면 당일 종가 반환
-    Returns: Series  index=종목코드, value=주가(원)
+
+def get_current_prices_batch(tickers: list) -> pd.Series:
+    """
+    KRX 일괄 API 방식 — 당일 전체 시장 데이터를 한 번에 조회 (빠름)
+    실패 시 개별 조회로 폴백
     """
     try:
         from pykrx import stock as krx
     except ImportError:
-        logger.error("pykrx 미설치")
-        return pd.Series(dtype=float)
-
-    # 오늘 → 데이터 없으면 전일 시도
-    for offset in range(5):
-        date = _latest_trading_date(offset)
-        try:
-            result = {}
-            for ticker in tickers:
-                try:
-                    df = krx.get_market_ohlcv(date, date, ticker, adjusted=True)
-                    if not df.empty and "종가" in df.columns:
-                        price = float(df["종가"].iloc[-1])
-                        if price > 0:
-                            result[ticker] = price
-                    time.sleep(sleep_sec)
-                except Exception:
-                    continue
-
-            if result:
-                logger.info(f"현재가 조회: {len(result)}개 (기준일: {date})")
-                return pd.Series(result)
-        except Exception as e:
-            logger.warning(f"현재가 조회 실패 ({date}): {e}")
-            continue
-
-    return pd.Series(dtype=float)
-
-
-def get_current_prices_batch(
-    tickers: list[str],
-) -> pd.Series:
-    """
-    KRX 일괄 API 방식 (더 빠름)
-    get_market_ohlcv_by_date 대신 당일 전체 시장 데이터 한 번에 조회
-    """
-    try:
-        from pykrx import stock as krx
-    except ImportError:
+        logger.warning("pykrx 미설치 — 현재가 조회 불가")
         return pd.Series(dtype=float)
 
     for offset in range(5):
         date = _latest_trading_date(offset)
         try:
-            # KOSPI 전체
-            df_kospi  = krx.get_market_ohlcv(date, date, adjusted=True, market="KOSPI")
-            df_kosdaq = krx.get_market_ohlcv(date, date, adjusted=True, market="KOSDAQ")
-            df_all = pd.concat([df_kospi, df_kosdaq])
+            df_kospi  = _fetch_market_ohlcv(krx, date, "KOSPI")
+            df_kosdaq = _fetch_market_ohlcv(krx, date, "KOSDAQ")
 
-            if df_all.empty:
+            frames = [df for df in [df_kospi, df_kosdaq] if not df.empty]
+            if not frames:
                 continue
 
-            prices = df_all["종가"].reindex(tickers).dropna()
+            df_all = pd.concat(frames)
+
+            # 종가 컬럼 찾기 (버전마다 다를 수 있음)
+            close_col = None
+            for col in ["종가", "Close", "close"]:
+                if col in df_all.columns:
+                    close_col = col
+                    break
+
+            if close_col is None:
+                logger.warning("종가 컬럼을 찾을 수 없음: %s", list(df_all.columns))
+                continue
+
+            prices = df_all[close_col].reindex(tickers).dropna()
+            prices = prices[prices > 0]
+
             if not prices.empty:
-                logger.info(f"배치 현재가: {len(prices)}개 ({date})")
+                logger.info("배치 현재가: %d개 (%s)", len(prices), date)
                 return prices
+
         except Exception as e:
-            logger.debug(f"배치 조회 실패: {e}")
+            logger.debug("배치 조회 실패 (%s): %s", date, e)
             continue
 
     # 폴백: 개별 조회
-    return get_current_prices(tickers)
+    return _get_prices_individual(tickers)
+
+
+def _get_prices_individual(tickers: list, sleep_sec: float = 0.05) -> pd.Series:
+    """종목별 개별 현재가 조회 (폴백)"""
+    try:
+        from pykrx import stock as krx
+    except ImportError:
+        return pd.Series(dtype=float)
+
+    result = {}
+    for offset in range(3):
+        date = _latest_trading_date(offset)
+        for ticker in tickers:
+            if ticker in result:
+                continue
+            try:
+                df = krx.get_market_ohlcv(date, date, ticker)
+                if df.empty:
+                    continue
+                for col in ["종가", "Close", "close"]:
+                    if col in df.columns:
+                        price = float(df[col].iloc[-1])
+                        if price > 0:
+                            result[ticker] = price
+                        break
+                time.sleep(sleep_sec)
+            except Exception:
+                continue
+        if result:
+            break
+
+    return pd.Series(result)
+
+
+# 하위 호환용 alias
+def get_current_prices(tickers: list, sleep_sec: float = 0.1) -> pd.Series:
+    return _get_prices_individual(tickers, sleep_sec)

@@ -12,6 +12,7 @@ import pandas as pd
 import numpy as np
 import re
 from pathlib import Path
+from typing import Union
 
 
 # ─────────────────────────────────────────
@@ -128,7 +129,7 @@ def _load_long(df: pd.DataFrame) -> pd.DataFrame:
 # 공개 API
 # ─────────────────────────────────────────
 
-def load_excel(path: str | Path, sheet_name: int | str = 0) -> pd.DataFrame:
+def load_excel(path: Union[str, Path], sheet_name: Union[int, str] = 0) -> pd.DataFrame:
     """
     DataGuide / Infomax 엑셀 파일 로드
     Wide / Long 자동 감지 후 표준 DataFrame 반환
@@ -148,7 +149,7 @@ def load_excel(path: str | Path, sheet_name: int | str = 0) -> pd.DataFrame:
         return _load_wide(raw)
 
 
-def load_ticker_names(path: str | Path, sheet_name: int | str = 0) -> dict:
+def load_ticker_names(path: Union[str, Path], sheet_name: Union[int, str] = 0) -> dict:
     """
     종목코드 → 종목명 매핑 로드
     형식: 첫 열 = 종목코드, 두 번째 열 = 종목명
@@ -167,7 +168,7 @@ def make_sample_data(
     start: str = "2020-01-01",
     end: str = "2025-12-31",
     seed: int = 42,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple:
     """
     테스트용 샘플 데이터 생성 (Wide 형식)
     Returns: (price_df, eps_df)
