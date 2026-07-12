@@ -1,9 +1,5 @@
 # 데이터 파일 (대용량 / 개인 데이터)
-data/fwd_eps.xlsx
-data/price.xlsx
 data/fwd_eps_parsed.xlsx
-data/price_test.xlsx
-data/screening_result.xlsx
 data/zNex~$hareuniverse.csv
 data/_analyze_eps.py
 data/_eps_structure.json
