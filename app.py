@@ -250,8 +250,18 @@ AX = dict(gridcolor="rgba(255,255,255,0.05)", zerolinecolor="rgba(255,255,255,0.
 # ──────────────────────────────────────────────
 # 데이터 로딩 (캐시)
 # ──────────────────────────────────────────────
+def _get_file_mtimes():
+    """파일 수정 시간 반환 — 캐시 무효화 키로 사용"""
+    import os
+    price_path = ROOT / "data" / "price.xlsx"
+    eps_path   = ROOT / "data" / "fwd_eps.xlsx"
+    mt_price = int(os.path.getmtime(price_path)) if price_path.exists() else 0
+    mt_eps   = int(os.path.getmtime(eps_path))   if eps_path.exists()   else 0
+    return mt_price, mt_eps
+
 @st.cache_data(ttl=3600, show_spinner=False)
-def load_all_data(band_years):
+def load_all_data(band_years, _mtimes=(0, 0)):
+    """_mtimes 는 파일 수정 시간 — 파일 변경 시 캐시 자동 무효화"""
     price_path = ROOT / "data" / "price.xlsx"
     eps_path   = ROOT / "data" / "fwd_eps.xlsx"
     uni_path   = ROOT / "data" / "universe.csv"
@@ -354,8 +364,9 @@ with st.sidebar:
     pe_pct_range = st.slider("P/E 위치 범위 (%)", 0, 100, (0, 80))
 
     st.markdown("---")
-    if st.button("🔄 현재가 새로고침"):
+    if st.button("🔄 데이터 새로고침"):
         st.cache_data.clear()
+        st.rerun()
 
     st.markdown("---")
     st.markdown(
@@ -384,7 +395,7 @@ st.markdown(f"""
 # 데이터 로드
 # ──────────────────────────────────────────────
 with st.spinner("데이터 로드 중..."):
-    price_df, eps_df, names, markets, all_results = load_all_data(band_years)
+    price_df, eps_df, names, markets, all_results = load_all_data(band_years, _mtimes=_get_file_mtimes())
 
 if not all_results:
     st.error("data/price.xlsx 또는 data/fwd_eps.xlsx 파일이 없습니다.")
