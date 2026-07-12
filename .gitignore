@@ -1,0 +1,27 @@
+# 데이터 파일 (대용량 / 개인 데이터)
+data/fwd_eps.xlsx
+data/price.xlsx
+data/fwd_eps_parsed.xlsx
+data/price_test.xlsx
+data/screening_result.xlsx
+data/zNex~$hareuniverse.csv
+data/_analyze_eps.py
+data/_eps_structure.json
+data/_quick_screen.py
+data/_test_dg_func.py
+data/dg_codes_all.txt
+data/dg_codes_comma.txt
+data/dg_codes_named.xlsx
+
+# 임시 파일
+templates/
+*.tmp
+*.log
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# Windows 임시
+Thumbs.db
+desktop.ini
