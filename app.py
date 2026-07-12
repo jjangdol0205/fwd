@@ -29,6 +29,62 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+# ──────────────────────────────────────────────
+# PWA (앱 설치) 지원 인젝터
+# ──────────────────────────────────────────────
+import streamlit.components.v1 as components
+
+def inject_pwa():
+    components.html("""
+    <script>
+    const parentDoc = window.parent.document;
+    if (!parentDoc.getElementById("pwa-manifest")) {
+        const manifest = {
+            "name": "Fwd P/E Screener",
+            "short_name": "Screener",
+            "start_url": ".",
+            "display": "standalone",
+            "background_color": "#0a0a14",
+            "theme_color": "#6366f1",
+            "icons": [{
+                "src": "https://cdn-icons-png.flaticon.com/512/2933/2933116.png",
+                "sizes": "512x512",
+                "type": "image/png"
+            }, {
+                "src": "https://cdn-icons-png.flaticon.com/512/2933/2933116.png",
+                "sizes": "192x192",
+                "type": "image/png"
+            }]
+        };
+        const blob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
+        const manifestURL = URL.createObjectURL(blob);
+        
+        const link = parentDoc.createElement('link');
+        link.rel = 'manifest';
+        link.id = 'pwa-manifest';
+        link.href = manifestURL;
+        parentDoc.head.appendChild(link);
+        
+        const meta1 = parentDoc.createElement('meta');
+        meta1.name = 'apple-mobile-web-app-capable';
+        meta1.content = 'yes';
+        parentDoc.head.appendChild(meta1);
+        
+        const meta2 = parentDoc.createElement('meta');
+        meta2.name = 'apple-mobile-web-app-status-bar-style';
+        meta2.content = 'black-translucent';
+        parentDoc.head.appendChild(meta2);
+        
+        const linkIcon = parentDoc.createElement('link');
+        linkIcon.rel = 'apple-touch-icon';
+        linkIcon.href = 'https://cdn-icons-png.flaticon.com/512/2933/2933116.png';
+        parentDoc.head.appendChild(linkIcon);
+    }
+    </script>
+    """, height=0, width=0)
+
+inject_pwa()
+
 
 # ──────────────────────────────────────────────
 # CSS
@@ -43,7 +99,9 @@ section[data-testid="stSidebar"] {
     border-right: 1px solid rgba(255,255,255,0.07);
 }
 section[data-testid="stSidebar"] * { color: #c4c4e0 !important; }
-.dg-header { display: flex; align-items: center; gap: 16px; padding: 8px 0 20px 0; }
+
+/* ── 헤더 ── */
+.dg-header { display: flex; align-items: flex-start; gap: 16px; padding: 8px 0 20px 0; flex-wrap: wrap; }
 .dg-logo {
     font-size: 2.2rem; font-weight: 800; letter-spacing: -1px;
     background: linear-gradient(135deg, #818cf8, #c084fc, #38bdf8);
@@ -51,25 +109,36 @@ section[data-testid="stSidebar"] * { color: #c4c4e0 !important; }
 }
 .dg-sub { font-size: 0.85rem; color: #6366f1; font-weight: 500; margin-top: 2px; }
 .dg-date { font-size: 0.78rem; color: #4b5563; margin-left: auto; }
-.kpi-row { display: flex; gap: 12px; margin: 16px 0; }
+
+/* ── KPI 카드 ── */
+.kpi-row {
+    display: flex; gap: 10px; margin: 16px 0;
+    flex-wrap: wrap;
+}
 .kpi-card {
-    flex: 1; background: rgba(255,255,255,0.04);
+    flex: 1 1 160px;
+    background: rgba(255,255,255,0.04);
     border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 14px; padding: 16px 18px; transition: border-color .2s;
+    border-radius: 14px; padding: 14px 16px; transition: border-color .2s;
+    min-width: 0;
 }
 .kpi-card:hover { border-color: rgba(129,140,248,0.4); }
 .kpi-label { font-size: 0.72rem; color: #6b7280; text-transform: uppercase; letter-spacing: .06em; }
-.kpi-value { font-size: 1.9rem; font-weight: 700; margin: 4px 0 2px; }
+.kpi-value { font-size: 1.7rem; font-weight: 700; margin: 4px 0 2px; }
 .kpi-sub   { font-size: 0.72rem; color: #6b7280; }
 .kpi-green { color: #34d399; } .kpi-red { color: #f87171; }
 .kpi-blue  { color: #60a5fa; } .kpi-purple { color: #a78bfa; } .kpi-yellow { color: #fbbf24; }
+
+/* ── 신호 배지 ── */
 .sig { display: inline-block; border-radius: 6px; padding: 2px 10px; font-size: 0.72rem; font-weight: 600; }
 .sig-sb { background: rgba(52,211,153,0.15); color: #34d399; border: 1px solid rgba(52,211,153,0.3); }
 .sig-b  { background: rgba(96,165,250,0.12); color: #60a5fa; border: 1px solid rgba(96,165,250,0.25); }
 .sig-h  { background: rgba(251,191,36,0.12); color: #fbbf24; border: 1px solid rgba(251,191,36,0.25); }
 .sig-s  { background: rgba(251,146,60,0.12); color: #fb923c; border: 1px solid rgba(251,146,60,0.25); }
 .sig-ss { background: rgba(248,113,113,0.12); color: #f87171; border: 1px solid rgba(248,113,113,0.3); }
-.stTabs [data-baseweb="tab-list"] { background: transparent; gap: 8px; }
+
+/* ── 탭 ── */
+.stTabs [data-baseweb="tab-list"] { background: transparent; gap: 6px; flex-wrap: wrap; }
 .stTabs [data-baseweb="tab"] {
     background: rgba(255,255,255,0.04) !important; border-radius: 8px !important;
     color: #9ca3af !important; border: 1px solid rgba(255,255,255,0.07) !important;
@@ -79,30 +148,68 @@ section[data-testid="stSidebar"] * { color: #c4c4e0 !important; }
     background: rgba(99,102,241,0.2) !important;
     color: #818cf8 !important; border-color: rgba(99,102,241,0.4) !important;
 }
+
+/* ── 버튼 ── */
 .stButton > button {
     background: linear-gradient(135deg, #4f46e5, #7c3aed) !important;
     color: white !important; border: none !important; border-radius: 8px !important;
     font-weight: 600 !important; font-size: 0.82rem !important;
 }
+.stDownloadButton > button {
+    background: linear-gradient(135deg, #059669, #10b981) !important;
+    color: white !important; border: none !important; border-radius: 10px !important;
+    font-weight: 700 !important; font-size: 0.88rem !important;
+    width: 100%;
+}
+.stDownloadButton > button:hover {
+    background: linear-gradient(135deg, #047857, #059669) !important;
+    box-shadow: 0 4px 12px rgba(16,185,129,0.3) !important;
+}
+
+/* ── 상세 카드 ── */
 .detail-card {
     background: rgba(255,255,255,0.03);
     border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 16px; padding: 20px;
+    border-radius: 16px; padding: 16px;
+    height: 100%;
 }
-.detail-ticker { font-size: 0.78rem; color: #6366f1; font-weight: 600; }
-.detail-name   { font-size: 1.3rem; font-weight: 700; margin: 2px 0 10px; }
-.price-tag { font-size: 1.6rem; font-weight: 700; color: #f1f5f9; }
-.target-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 12px 0; }
-.target-box  { border-radius: 10px; padding: 12px; text-align: center; }
+.detail-ticker { font-size: 0.75rem; color: #6366f1; font-weight: 600; }
+.detail-name   { font-size: 1.2rem; font-weight: 700; margin: 2px 0 10px; line-height: 1.3; }
+.price-tag { font-size: 1.5rem; font-weight: 700; color: #f1f5f9; }
+
+/* ── 목표가 그리드 ── */
+.target-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 10px 0; }
+.target-box  { border-radius: 10px; padding: 10px; text-align: center; }
 .target-bear { background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.2); }
 .target-base { background: rgba(251,191,36,0.08);  border: 1px solid rgba(251,191,36,0.2); }
 .target-bull { background: rgba(52,211,153,0.08);  border: 1px solid rgba(52,211,153,0.2); }
-.t-label { font-size: 0.68rem; color: #9ca3af; text-transform: uppercase; letter-spacing: .06em; }
-.t-price { font-size: 1.1rem; font-weight: 700; margin: 4px 0 2px; }
-.t-upside{ font-size: 0.78rem; font-weight: 600; }
+.t-label { font-size: 0.65rem; color: #9ca3af; text-transform: uppercase; letter-spacing: .06em; }
+.t-price { font-size: 0.95rem; font-weight: 700; margin: 3px 0 2px; }
+.t-upside{ font-size: 0.75rem; font-weight: 600; }
 .t-bear-c { color: #f87171; } .t-base-c { color: #fbbf24; } .t-bull-c { color: #34d399; }
 .pe-bar { height: 6px; border-radius: 3px; background: #1f2937; margin-top: 4px; overflow: hidden; }
 .pe-fill { height: 100%; border-radius: 3px; }
+
+/* ════════════════════════════════════
+   📱 모바일 반응형
+   ════════════════════════════════════ */
+@media (max-width: 768px) {
+    .dg-logo { font-size: 1.6rem; }
+    .dg-sub  { font-size: 0.75rem; }
+    .dg-date { margin-left: 0; margin-top: 4px; }
+    .kpi-card  { flex: 1 1 calc(50% - 5px); }
+    .kpi-value { font-size: 1.35rem; }
+    .detail-name { font-size: 1rem; }
+    .price-tag   { font-size: 1.2rem; }
+    .target-box  { padding: 8px 4px; }
+    .t-price     { font-size: 0.8rem; }
+    .stTabs [data-baseweb="tab"] { font-size: 0.72rem !important; padding: 5px 8px !important; }
+}
+@media (max-width: 480px) {
+    .kpi-card  { flex: 1 1 100%; }
+    .kpi-value { font-size: 1.25rem; }
+    .target-grid { grid-template-columns: 1fr; gap: 6px; }
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -567,7 +674,7 @@ if search_q and search_q.strip():
                                       annotation_bgcolor="rgba(0,0,0,0.5)")
                     _fp.add_hrect(y0=sel_r.target_bear, y1=sel_r.target_bull,
                                   fillcolor="rgba(251,191,36,0.06)", line_width=0)
-                    _fp.update_layout(**CHART_LAYOUT, height=280,
+                    _fp.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(255,255,255,0.02)", font=dict(color="#9ca3af", size=11), height=280,
                                       title=dict(text=f"{sel_r.name} — 주가 추이(2년) & 목표가",
                                                  x=0, font=dict(size=12, color="#c4c4e0")),
                                       xaxis=dict(**AX), yaxis=dict(**AX, title="주가 (원)"),
@@ -611,7 +718,10 @@ if search_q and search_q.strip():
                         bgcolor="rgba(0,0,0,0.75)", bordercolor=_cn, borderwidth=1.5,
                         align="center")
                     _fig_g.update_layout(
-                        **CHART_LAYOUT, height=280,
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(255,255,255,0.02)",
+                        font=dict(color="#9ca3af", size=11),
+                        height=280,
                         title=dict(text=f"P/E 역사적 위치 — <b style='color:{_cn}'>{_pct:.0f}%</b>",
                                    x=0, font=dict(size=12, color="#c4c4e0")),
                         xaxis=dict(range=[-3,103], showticklabels=False, showgrid=False, zeroline=False,
@@ -666,19 +776,34 @@ with tab1:
             })
 
         df_show = pd.DataFrame(rows)
+
+        # ── 다운로드 버튼 (테이블 위에 배치) ──
+        import io
+        _dl1, _dl2, _ = st.columns([1, 1, 2])
+        with _dl1:
+            buf_xl = io.BytesIO()
+            df_show.to_excel(buf_xl, index=False)
+            st.download_button(
+                "📥 Excel 다운로드",
+                data=buf_xl.getvalue(),
+                file_name=f"pe_screen_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
+        with _dl2:
+            csv_data = df_show.to_csv(index=False).encode("utf-8-sig")
+            st.download_button(
+                "📥 CSV 다운로드",
+                data=csv_data,
+                file_name=f"pe_screen_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+
         st.dataframe(
             df_show, use_container_width=True,
             height=min(80 + len(rows) * 36, 560),
             hide_index=True,
-        )
-
-        import io
-        buf = io.BytesIO()
-        df_show.to_excel(buf, index=False)
-        st.download_button(
-            "⬇️ Excel 다운로드", data=buf.getvalue(),
-            file_name=f"pe_screen_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
 
@@ -836,9 +961,80 @@ with tab3:
             </div>
             """, unsafe_allow_html=True)
 
+        # ── 다운로드 ───────────────────────────────
+        import io as _io
+        _d1, _d2, _d3 = st.columns([1, 1, 1])
+        with _d1:
+            # 현재 종목 데이터
+            _stock_rows = {
+                "항목": ["종목명","코드","지수","현재가","Fwd EPS","Fwd P/E","P/E 위치",
+                          "P/E Min","P/E 25th","P/E Median","P/E 75th","P/E Max",
+                          "Bear목표가","Base목표가","Bull목표가",
+                          "Bear업사이드%","Base업사이드%","Bull업사이드%"],
+                "값": [r.name, r.ticker, mkt,
+                        f"{rt_p:,.0f}", f"{r.current_fwd_eps:,.0f}",
+                        f"{r.current_fwd_pe:.2f}x", f"{r.pe_percentile:.1f}%",
+                        f"{r.pe_min:.2f}x", f"{r.pe_p25:.2f}x",
+                        f"{r.pe_median:.2f}x", f"{r.pe_p75:.2f}x", f"{r.pe_max:.2f}x",
+                        f"{r.target_bear:,.0f}", f"{r.target_base:,.0f}", f"{r.target_bull:,.0f}",
+                        f"{r.upside_bear:+.1f}%", f"{r.upside_base:+.1f}%", f"{r.upside_bull:+.1f}%"],
+            }
+            _df_stock = pd.DataFrame(_stock_rows)
+            _buf_s = _io.BytesIO()
+            _df_stock.to_excel(_buf_s, index=False)
+            st.download_button(
+                f"📥 {r.name} Excel",
+                data=_buf_s.getvalue(),
+                file_name=f"{r.ticker}_{r.name}_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
+        with _d2:
+            # EPS + 주가 시계열 CSV
+            _eps_s = r.hist_eps_series.dropna().rename("Fwd_EPS")
+            _prc_s = r.hist_price_series.dropna().rename("Price")
+            _pe_s  = r.hist_pe_series.dropna().rename("Fwd_PE")
+            _ts_df = pd.concat([_prc_s, _eps_s, _pe_s], axis=1)
+            _ts_df.index.name = "Date"
+            _csv_ts = _ts_df.reset_index().to_csv(index=False).encode("utf-8-sig")
+            st.download_button(
+                "📥 시계열 CSV",
+                data=_csv_ts,
+                file_name=f"{r.ticker}_{r.name}_timeseries.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+        with _d3:
+            # 전체 스크리닝 결과
+            _all_rows = []
+            for _r2 in filtered:
+                _all_rows.append({
+                    "신호": signal_label(_r2.pe_percentile),
+                    "종목명": _r2.name, "코드": _r2.ticker,
+                    "지수": markets.get(_r2.ticker,""),
+                    "현재가": f"{_r2.current_price:,.0f}",
+                    "FwdEPS": f"{_r2.current_fwd_eps:,.0f}",
+                    "FwdPE": f"{_r2.current_fwd_pe:.1f}x",
+                    "PE위치%": f"{_r2.pe_percentile:.0f}%",
+                    "Bear목표": f"{_r2.target_bear:,.0f}",
+                    "Base목표": f"{_r2.target_base:,.0f}",
+                    "Bull목표": f"{_r2.target_bull:,.0f}",
+                    "Base%": f"{_r2.upside_base:+.1f}%",
+                })
+            _buf_all = _io.BytesIO()
+            pd.DataFrame(_all_rows).to_excel(_buf_all, index=False)
+            st.download_button(
+                "📥 전체 결과 Excel",
+                data=_buf_all.getvalue(),
+                file_name=f"screener_all_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
+
         st.markdown("<br>", unsafe_allow_html=True)
 
         # ── 행 1: 주가 추이(최근 2년) + 목표가 비교 ──
+
         c1, c2 = st.columns([3, 2])
 
         with c1:
