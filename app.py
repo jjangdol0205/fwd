@@ -1305,16 +1305,6 @@ with tab3:
                 y=0, line_color="rgba(255,255,255,0.2)", line_width=1,
             )
 
-            # 연도별 영역 배경 (짝수 연도 음영)
-            years = sorted(set(eps_full.index.year))
-            for yr in years:
-                if yr % 2 == 0:
-                    yr_data = eps_full[eps_full.index.year == yr]
-                    if not yr_data.empty:
-                        fig_eps2.add_vrect(
-                            x0=yr_data.index.min(), x1=yr_data.index.max(),
-                            fillcolor="rgba(255,255,255,0.02)", line_width=0,
-                        )
 
             fig_eps2.update_layout(
                 **CHART_LAYOUT, height=320,
@@ -1332,56 +1322,57 @@ with tab3:
             st.plotly_chart(fig_eps2, use_container_width=True)
 
         with ce2:
-            # ── 연간 평균 EPS 바 차트 ──
-            eps_annual = eps_full.resample("YE").mean().dropna()
-            # YoY 성장률
-            yoy = eps_annual.pct_change() * 100
+            try:
+                # ── 연간 평균 EPS (groupby year) ── pandas 2.0 호환
+                eps_annual_s = eps_full.groupby(eps_full.index.year).mean()
+                eps_annual_s.index = eps_annual_s.index.astype(str)  # '2010', '2011', ...
+                yoy = eps_annual_s.pct_change() * 100
 
-            fig_ann = go.Figure()
-            bar_colors = [
-                "#34d399" if v >= 0 else "#f87171"
-                for v in eps_annual.values
-            ]
-            fig_ann.add_trace(go.Bar(
-                x=[str(d.year) for d in eps_annual.index],
-                y=eps_annual.values,
-                marker_color=bar_colors,
-                opacity=0.85,
-                name="연간 평균",
-                text=[f"₩{v:,.0f}" for v in eps_annual.values],
-                textposition="outside",
-                textfont=dict(size=8, color="#9ca3af"),
-                hovertemplate="%{x}년<br>₩%{y:,.0f}<extra></extra>",
-            ))
+                fig_ann = go.Figure()
+                bar_colors = [
+                    "#34d399" if v >= 0 else "#f87171"
+                    for v in eps_annual_s.values
+                ]
+                fig_ann.add_trace(go.Bar(
+                    x=list(eps_annual_s.index),
+                    y=eps_annual_s.values,
+                    marker_color=bar_colors,
+                    opacity=0.85,
+                    name="연간 평균",
+                    hovertemplate="%{x}년<br>₩%{y:,.0f}<extra></extra>",
+                ))
 
-            # YoY 성장률 라인 (보조축)
-            yoy_colors = ["#34d399" if v >= 0 else "#f87171" for v in yoy.dropna().values]
-            fig_ann.add_trace(go.Scatter(
-                x=[str(d.year) for d in yoy.dropna().index],
-                y=yoy.dropna().values,
-                mode="lines+markers",
-                name="YoY(%)",
-                yaxis="y2",
-                line=dict(color="#fbbf24", width=1.5, dash="dot"),
-                marker=dict(color=yoy_colors, size=5),
-                hovertemplate="%{x}년<br>YoY %{y:+.1f}%<extra></extra>",
-            ))
+                # YoY 성장률 라인 (보조축)
+                yoy_valid = yoy.dropna()
+                yoy_colors = ["#34d399" if v >= 0 else "#f87171" for v in yoy_valid.values]
+                fig_ann.add_trace(go.Scatter(
+                    x=list(yoy_valid.index),
+                    y=yoy_valid.values,
+                    mode="lines+markers",
+                    name="YoY(%)",
+                    yaxis="y2",
+                    line=dict(color="#fbbf24", width=1.5, dash="dot"),
+                    marker=dict(color=yoy_colors, size=5),
+                    hovertemplate="%{x}년<br>YoY %{y:+.1f}%<extra></extra>",
+                ))
 
-            fig_ann.update_layout(
-                **CHART_LAYOUT, height=320,
-                margin=dict(l=10, r=40, t=40, b=30),
-                title=dict(text="연간 평균 EPS & YoY(%)",
-                           x=0, font=dict(size=12, color="#c4c4e0")),
-                xaxis=dict(showgrid=False, zeroline=False, tickangle=-45),
-                yaxis=dict(**AX, title="EPS (원)", tickformat=","),
-                yaxis2=dict(
-                    title="YoY(%)", overlaying="y", side="right",
-                    showgrid=False, zeroline=False,
-                    tickfont=dict(color="#fbbf24", size=9),
-                    titlefont=dict(color="#fbbf24"),
-                ),
-                legend=dict(orientation="h", y=1.06, x=0, font=dict(size=10)),
-                barmode="overlay",
-            )
-            st.plotly_chart(fig_ann, use_container_width=True)
+                fig_ann.update_layout(
+                    **CHART_LAYOUT, height=320,
+                    margin=dict(l=10, r=40, t=40, b=30),
+                    title=dict(text="연간 평균 EPS & YoY(%)",
+                               x=0, font=dict(size=12, color="#c4c4e0")),
+                    xaxis=dict(showgrid=False, zeroline=False, tickangle=-45),
+                    yaxis=dict(**AX, title="EPS (원)", tickformat=","),
+                    yaxis2=dict(
+                        title="YoY(%)", overlaying="y", side="right",
+                        showgrid=False, zeroline=False,
+                        tickfont=dict(color="#fbbf24", size=9),
+                        titlefont=dict(color="#fbbf24"),
+                    ),
+                    legend=dict(orientation="h", y=1.06, x=0, font=dict(size=10)),
+                    barmode="overlay",
+                )
+                st.plotly_chart(fig_ann, use_container_width=True)
+            except Exception as _e:
+                st.caption(f"연간 EPS 차트 오류: {_e}")
 
