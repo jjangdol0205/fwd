@@ -250,17 +250,19 @@ AX = dict(gridcolor="rgba(255,255,255,0.05)", zerolinecolor="rgba(255,255,255,0.
 # 데이터 로딩 (캐시)
 # ──────────────────────────────────────────────
 def _get_file_mtimes():
-    """파일 수정 시간 반환 — 캐시 무효화 키로 사용"""
+    """파일 수정 시간 및 크기 반환 — 캐시 무효화 키로 사용"""
     import os
     price_path = ROOT / "data" / "price.xlsx"
     eps_path   = ROOT / "data" / "fwd_eps.xlsx"
     mt_price = int(os.path.getmtime(price_path)) if price_path.exists() else 0
     mt_eps   = int(os.path.getmtime(eps_path))   if eps_path.exists()   else 0
-    return mt_price, mt_eps
+    sz_price = os.path.getsize(price_path) if price_path.exists() else 0
+    sz_eps   = os.path.getsize(eps_path)   if eps_path.exists()   else 0
+    return mt_price, mt_eps, sz_price, sz_eps
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def load_all_data(band_years, _mtimes=(0, 0)):
-    """_mtimes 는 파일 수정 시간 — 파일 변경 시 캐시 자동 무효화"""
+@st.cache_data(ttl=300, show_spinner=False)
+def load_all_data(band_years, _mtimes=(0, 0, 0, 0)):
+    """_mtimes 는 파일 수정 시간 및 크기 — 파일 변경 시 캐시 자동 무효화"""
     price_path = ROOT / "data" / "price.xlsx"
     eps_path   = ROOT / "data" / "fwd_eps.xlsx"
     uni_path   = ROOT / "data" / "universe.csv"
@@ -772,6 +774,30 @@ with tab1:
                 "종목명":    r.name,
                 "코드":      r.ticker,
                 "지수":      mkt,
+                "현재가":    float(r.current_price),
+                "Fwd EPS":   float(r.current_fwd_eps),
+                "Fwd P/E":   float(r.current_fwd_pe),
+                "P/E 위치":  float(r.pe_percentile),
+                "P/E 중앙값":float(r.pe_median),
+                "🐻Bear목표":float(r.target_bear),
+                "📍Base목표":float(r.target_base),
+                "🐂Bull목표":float(r.target_bull),
+                "Bear%":     float(r.upside_bear),
+                "Base%":     float(r.upside_base),
+                "Bull%":     float(r.upside_bull),
+            })
+
+        df_show = pd.DataFrame(rows)
+
+        # 다운로드용 포맷팅 데이터프레임 별도 생성 (기존 포맷 유지)
+        rows_formatted = []
+        for r in filtered:
+            mkt = markets.get(r.ticker, "")
+            rows_formatted.append({
+                "신호":      signal_label(r.pe_percentile),
+                "종목명":    r.name,
+                "코드":      r.ticker,
+                "지수":      mkt,
                 "현재가":    f"{r.current_price:>10,.0f}",
                 "Fwd EPS":   f"{r.current_fwd_eps:>9,.0f}",
                 "Fwd P/E":   f"{r.current_fwd_pe:.1f}x",
@@ -784,15 +810,14 @@ with tab1:
                 "Base%":     f"{r.upside_base:+.1f}%",
                 "Bull%":     f"{r.upside_bull:+.1f}%",
             })
-
-        df_show = pd.DataFrame(rows)
+        df_download = pd.DataFrame(rows_formatted)
 
         # ── 다운로드 버튼 (테이블 위에 배치) ──
         import io
         _dl1, _dl2, _ = st.columns([1, 1, 2])
         with _dl1:
             buf_xl = io.BytesIO()
-            df_show.to_excel(buf_xl, index=False)
+            df_download.to_excel(buf_xl, index=False)
             st.download_button(
                 "📥 Excel 다운로드",
                 data=buf_xl.getvalue(),
@@ -801,7 +826,7 @@ with tab1:
                 use_container_width=True,
             )
         with _dl2:
-            csv_data = df_show.to_csv(index=False).encode("utf-8-sig")
+            csv_data = df_download.to_csv(index=False).encode("utf-8-sig")
             st.download_button(
                 "📥 CSV 다운로드",
                 data=csv_data,
@@ -811,7 +836,21 @@ with tab1:
             )
 
         st.dataframe(
-            df_show, use_container_width=True,
+            df_show, 
+            column_config={
+                "현재가": st.column_config.NumberColumn("현재가", format="₩%,.0f"),
+                "Fwd EPS": st.column_config.NumberColumn("Fwd EPS", format="₩%,.0f"),
+                "Fwd P/E": st.column_config.NumberColumn("Fwd P/E", format="%.1fx"),
+                "P/E 위치": st.column_config.NumberColumn("P/E 위치", format="%.0f%%"),
+                "P/E 중앙값": st.column_config.NumberColumn("P/E 중앙값", format="%.1fx"),
+                "🐻Bear목표": st.column_config.NumberColumn("🐻Bear목표", format="₩%,.0f"),
+                "📍Base목표": st.column_config.NumberColumn("📍Base목표", format="₩%,.0f"),
+                "🐂Bull목표": st.column_config.NumberColumn("🐂Bull목표", format="₩%,.0f"),
+                "Bear%": st.column_config.NumberColumn("Bear%", format="%+.1f%%"),
+                "Base%": st.column_config.NumberColumn("Base%", format="%+.1f%%"),
+                "Bull%": st.column_config.NumberColumn("Bull%", format="%+.1f%%"),
+            },
+            use_container_width=True,
             height=min(80 + len(rows) * 36, 560),
             hide_index=True,
         )
@@ -1375,4 +1414,180 @@ with tab3:
                 st.plotly_chart(fig_ann, use_container_width=True)
             except Exception as _e:
                 st.caption(f"연간 EPS 차트 오류: {_e}")
+
+        # ── 행 4: [신규] 3대 핵심 지표 통합 시계열 분석 (주가 밴드 + EPS + P/E) ──
+        st.markdown("<hr style='border-color:rgba(255,255,255,0.07);margin:24px 0;'>", unsafe_allow_html=True)
+        st.markdown(
+            "<div style='font-size:1.1rem;color:#f1f5f9;font-weight:700;margin-bottom:8px'>"
+            "📊 3대 핵심 지표 통합 시계열 분석 (주가 P/E 밴드 · Fwd EPS · Fwd P/E)</div>",
+            unsafe_allow_html=True
+        )
+        st.markdown(
+            "<div style='font-size:0.8rem;color:#9ca3af;margin-bottom:16px'>"
+            "주가와 Fwd EPS 및 Fwd P/E의 역사적 추이를 동일한 시간축 상에서 연동하여 입체적으로 분석합니다. "
+            "첫 번째 차트의 밴드선은 Fwd EPS의 변화에 따라 동적으로 연동되는 역사적 P/E 밴드 주가 라인입니다.</div>",
+            unsafe_allow_html=True
+        )
+
+        # 1. 기간 선택 필터
+        chart_period = st.radio(
+            "시계열 분석 기간 선택",
+            ["최근 3년", "최근 5년", "최근 10년", "전체 기간"],
+            index=1,
+            horizontal=True,
+            key=f"period_{r.ticker}"
+        )
+
+        try:
+            from plotly.subplots import make_subplots
+            import plotly.graph_objects as go
+
+            # 시계열 데이터 정렬
+            p_series = r.hist_price_series.dropna().sort_index()
+            e_series = eps_df[r.ticker].dropna().sort_index() if r.ticker in eps_df.columns else r.hist_eps_series.dropna().sort_index()
+            
+            # 주가와 EPS의 날짜 교집합
+            common_idx = p_series.index.intersection(e_series.index)
+            p_common = p_series.loc[common_idx]
+            e_common = e_series.loc[common_idx]
+            
+            # Fwd P/E 계산 (0 이하 예외 처리)
+            pe_common = pd.Series(index=common_idx, dtype=float)
+            for idx in common_idx:
+                e_val = e_common.loc[idx]
+                p_val = p_common.loc[idx]
+                if e_val > 0:
+                    pe_val = p_val / e_val
+                    if 0 < pe_val <= 200:
+                        pe_common.loc[idx] = pe_val
+
+            # 기간 필터링
+            max_date = common_idx.max()
+            if chart_period == "최근 3년":
+                cutoff_date = max_date - pd.DateOffset(years=3)
+            elif chart_period == "최근 5년":
+                cutoff_date = max_date - pd.DateOffset(years=5)
+            elif chart_period == "최근 10년":
+                cutoff_date = max_date - pd.DateOffset(years=10)
+            else:
+                cutoff_date = common_idx.min()
+
+            filtered_idx = common_idx[common_idx >= cutoff_date]
+            p_plot = p_common.loc[filtered_idx]
+            e_plot = e_common.loc[filtered_idx]
+            pe_plot = pe_common.loc[filtered_idx]
+
+            # 3단 subplot 생성
+            fig_total = make_subplots(
+                rows=3, cols=1,
+                shared_xaxes=True,
+                vertical_spacing=0.06,
+                subplot_titles=(
+                    "① 주가 및 역사적 P/E 주가 밴드 (12M Fwd EPS 연동)",
+                    "② 12M Forward EPS 추이 & 12M 이동평균",
+                    "③ 12M Forward P/E 추이 & 역사적 밴드 기준선"
+                )
+            )
+
+            # --- ROW 1: 주가 및 P/E 주가 밴드 ---
+            # 밴드 라인 계산 (각 날짜의 EPS * 역사적 PE 통계치)
+            band_bear = e_plot * r.pe_p25
+            band_base = e_plot * r.pe_median
+            band_bull = e_plot * r.pe_p75
+
+            # 실제 주가
+            fig_total.add_trace(go.Scatter(
+                x=p_plot.index, y=p_plot.values,
+                mode="lines", name="실제 주가",
+                line=dict(color="#3b82f6", width=2.5),
+                hovertemplate="주가: ₩%{y:,.0f}<extra></extra>"
+            ), row=1, col=1)
+
+            # Bear 밴드 (25th)
+            fig_total.add_trace(go.Scatter(
+                x=band_bear.index, y=band_bear.values,
+                mode="lines", name="Bear 밴드 (25th P/E)",
+                line=dict(color="rgba(248,113,113,0.75)", width=1.2, dash="dash"),
+                hovertemplate="Bear 밴드: ₩%{y:,.0f}<extra></extra>"
+            ), row=1, col=1)
+
+            # Base 밴드 (Median)
+            fig_total.add_trace(go.Scatter(
+                x=band_base.index, y=band_base.values,
+                mode="lines", name="Base 밴드 (Median P/E)",
+                line=dict(color="rgba(251,191,36,0.9)", width=1.5, dash="dash"),
+                hovertemplate="Base 밴드: ₩%{y:,.0f}<extra></extra>"
+            ), row=1, col=1)
+
+            # Bull 밴드 (75th)
+            fig_total.add_trace(go.Scatter(
+                x=band_bull.index, y=band_bull.values,
+                mode="lines", name="Bull 밴드 (75th P/E)",
+                line=dict(color="rgba(52,211,153,0.75)", width=1.2, dash="dash"),
+                hovertemplate="Bull 밴드: ₩%{y:,.0f}<extra></extra>"
+            ), row=1, col=1)
+
+            # --- ROW 2: EPS 추이 ---
+            ma12_plot = e_plot.rolling(12, min_periods=3).mean()
+            # EPS 월별 값
+            fig_total.add_trace(go.Scatter(
+                x=e_plot.index, y=e_plot.values,
+                mode="lines", name="Fwd EPS",
+                line=dict(color="rgba(96,165,250,0.4)", width=1.2),
+                hovertemplate="Fwd EPS: ₩%{y:,.0f}<extra></extra>"
+            ), row=2, col=1)
+            # EPS MA12
+            fig_total.add_trace(go.Scatter(
+                x=ma12_plot.index, y=ma12_plot.values,
+                mode="lines", name="EPS MA12",
+                line=dict(color="#60a5fa", width=2),
+                hovertemplate="EPS MA12: ₩%{y:,.0f}<extra></extra>"
+            ), row=2, col=1)
+
+            # --- ROW 3: P/E 추이 ---
+            fig_total.add_trace(go.Scatter(
+                x=pe_plot.index, y=pe_plot.values,
+                mode="lines", name="Fwd P/E",
+                line=dict(color="#a78bfa", width=2),
+                hovertemplate="Fwd P/E: %{y:.1f}x<extra></extra>"
+            ), row=3, col=1)
+
+            # P/E 수평 기준선들
+            for val, lbl, col in [
+                (r.pe_max, "Max", "#9ca3af"),
+                (r.pe_p75, "75th", "#34d399"),
+                (r.pe_median, "Med", "#fbbf24"),
+                (r.pe_p25, "25th", "#f87171"),
+                (r.pe_min, "Min", "#9ca3af"),
+            ]:
+                fig_total.add_hline(
+                    y=val, line_dash="dot", line_color=col, line_width=1,
+                    annotation_text=f"{lbl} {val:.1f}x", annotation_position="right",
+                    annotation_font_color=col, annotation_font_size=9,
+                    row=3, col=1
+                )
+
+            # 전체 레이아웃 업데이트
+            fig_total.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(255,255,255,0.02)",
+                font=dict(color="#9ca3af", size=11),
+                height=650,
+                margin=dict(l=10, r=60, t=40, b=10),
+                hovermode="x unified",
+                legend=dict(orientation="h", y=1.03, x=0, font=dict(size=10)),
+            )
+
+            # 축 설정
+            fig_total.update_xaxes(showgrid=True, gridcolor="rgba(255,255,255,0.05)", zerolinecolor="rgba(255,255,255,0.08)")
+            fig_total.update_yaxes(showgrid=True, gridcolor="rgba(255,255,255,0.05)", zerolinecolor="rgba(255,255,255,0.08)")
+            
+            fig_total.update_yaxes(title_text="주가 (원)", row=1, col=1)
+            fig_total.update_yaxes(title_text="EPS (원)", row=2, col=1)
+            fig_total.update_yaxes(title_text="P/E 배수", row=3, col=1)
+
+            st.plotly_chart(fig_total, use_container_width=True)
+
+        except Exception as e_total:
+            st.caption(f"통합 시계열 차트 오류: {e_total}")
 
