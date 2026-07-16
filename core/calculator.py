@@ -75,8 +75,8 @@ def calc_pe_band(
     eps_series = eps_series.sort_index().dropna()
     common_idx = price_series.index.intersection(eps_series.index)
 
-    if len(common_idx) < 12:
-        return None  # 데이터 부족
+    if len(common_idx) < 6:
+        return None  # 데이터 부족 (6개월 미만)
 
     price = price_series.loc[common_idx]
     eps = eps_series.loc[common_idx]
@@ -86,7 +86,7 @@ def calc_pe_band(
     cutoff = pe_series.index.max() - pd.DateOffset(years=band_years)
     hist_pe = pe_series[pe_series.index >= cutoff].dropna()
 
-    if len(hist_pe) < 6:
+    if len(hist_pe) < 4:
         return None  # 밴드 계산에 충분한 데이터 없음
 
     # 현재 값

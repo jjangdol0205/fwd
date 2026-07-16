@@ -241,7 +241,6 @@ CHART_LAYOUT = dict(
     paper_bgcolor="rgba(0,0,0,0)",
     plot_bgcolor="rgba(255,255,255,0.02)",
     font=dict(color="#9ca3af", size=11),
-    margin=dict(l=10, r=20, t=40, b=10),
 )
 # 공통 축 스타일
 AX = dict(gridcolor="rgba(255,255,255,0.05)", zerolinecolor="rgba(255,255,255,0.08)")
@@ -885,6 +884,7 @@ with tab2:
 
         fig.update_layout(
             **CHART_LAYOUT, height=520,
+            margin=dict(l=10, r=20, t=40, b=10),
             title=dict(text="P/E 위치 vs Base 업사이드  (버블 크기 = Fwd EPS)", x=0, font=dict(size=13, color="#c4c4e0")),
             xaxis=dict(**AX, title="P/E 역사적 위치 (%)", range=[-2, 102]),
             yaxis=dict(**AX, title="Base 업사이드 (%)"),
@@ -1087,6 +1087,7 @@ with tab3:
             )
             fig_p.update_layout(
                 **CHART_LAYOUT, height=300,
+                margin=dict(l=10, r=20, t=40, b=10),
                 title=dict(text=f"{r.name} — 주가 추이(최근 2년) & Bear/Base/Bull 목표가",
                            x=0, font=dict(size=12, color="#c4c4e0")),
                 xaxis=dict(**AX),
@@ -1126,6 +1127,7 @@ with tab3:
                 )
             fig_tgt.update_layout(
                 **CHART_LAYOUT, height=300,
+                margin=dict(l=10, r=20, t=40, b=10),
                 title=dict(text="현재가 기준 Bear/Base/Bull 업사이드",
                            x=0, font=dict(size=12, color="#c4c4e0")),
                 xaxis=dict(**AX, title="주가 (원)"),
@@ -1168,6 +1170,7 @@ with tab3:
             )
             fig_pe.update_layout(
                 **CHART_LAYOUT, height=280,
+                margin=dict(l=10, r=20, t=40, b=10),
                 title=dict(text=f"Fwd P/E 역사적 밴드 ({band_years}년 기준) — 현재 {r.pe_percentile:.0f}% 위치",
                            x=0, font=dict(size=12, color="#c4c4e0")),
                 xaxis=dict(**AX),
@@ -1237,6 +1240,7 @@ with tab3:
 
             fig_g.update_layout(
                 **CHART_LAYOUT, height=280,
+                margin=dict(l=10, r=20, t=50, b=55),
                 title=dict(
                     text=f"P/E 역사적 위치 — <b style='color:{col_now}'>{pct:.0f}%</b>  (저평가→고평가)",
                     x=0, font=dict(size=12, color="#c4c4e0"),
@@ -1244,7 +1248,6 @@ with tab3:
                 xaxis=dict(range=[-3, 103], showticklabels=False, showgrid=False,
                            zeroline=False, title="← 저평가 (싸다)               고평가 (비싸다) →"),
                 yaxis=dict(range=[0, 1], showticklabels=False, showgrid=False, zeroline=False),
-                margin=dict(l=10, r=20, t=50, b=55),
             )
             st.plotly_chart(fig_g, use_container_width=True)
 
@@ -1263,6 +1266,7 @@ with tab3:
         )
         fig_eps.update_layout(
             **CHART_LAYOUT, height=240,
+            margin=dict(l=10, r=20, t=40, b=10),
             title=dict(text="12M Fwd EPS 연도별 추이",
                        x=0, font=dict(size=12, color="#c4c4e0")),
             xaxis=dict(**AX),
