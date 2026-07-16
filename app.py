@@ -1251,26 +1251,137 @@ with tab3:
             )
             st.plotly_chart(fig_g, use_container_width=True)
 
-        # ── 행 3: Fwd EPS 연도별 추이 ──
-        eps = r.hist_eps_series.dropna()
-        fig_eps = go.Figure()
-        fig_eps.add_trace(go.Bar(
-            x=eps.index, y=eps.values,
-            marker_color=["#34d399" if v >= 0 else "#f87171" for v in eps.values],
-            opacity=0.8, name="Fwd EPS",
-        ))
-        fig_eps.add_hline(
-            y=r.current_fwd_eps, line_color="#f1f5f9", line_width=1.5, line_dash="dot",
-            annotation_text=f"현재 EPS ₩{r.current_fwd_eps:,.0f}",
-            annotation_position="right", annotation_font_color="#f1f5f9", annotation_font_size=10,
+
+        # ── 행 3: 12M Fwd EPS 전체 추이 ──────────────────────────────
+        st.markdown("<div style='margin-top:8px'></div>", unsafe_allow_html=True)
+        st.markdown(
+            "<div style='font-size:0.85rem;color:#6b7280;font-weight:600;"
+            "letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px'>"
+            "📈 12M Fwd EPS 전체 추이</div>",
+            unsafe_allow_html=True
         )
-        fig_eps.update_layout(
-            **CHART_LAYOUT, height=240,
-            margin=dict(l=10, r=20, t=40, b=10),
-            title=dict(text="12M Fwd EPS 연도별 추이",
-                       x=0, font=dict(size=12, color="#c4c4e0")),
-            xaxis=dict(**AX),
-            yaxis=dict(**AX, title="EPS (원)"),
-            showlegend=False,
-        )
-        st.plotly_chart(fig_eps, use_container_width=True)
+
+        # eps_df 전체 이력 사용 (price 겹침 기간이 아닌 전체)
+        eps_full = eps_df[r.ticker].dropna().sort_index() if r.ticker in eps_df.columns else r.hist_eps_series.dropna()
+
+        ce1, ce2 = st.columns([3, 1])
+
+        with ce1:
+            fig_eps2 = go.Figure()
+
+            # ── 음영 배경: 데이터 전체 범위 ──
+            # 12개월 이동평균 (트렌드라인)
+            ma12 = eps_full.rolling(12, min_periods=3).mean()
+
+            # 월별 라인 (얇게)
+            fig_eps2.add_trace(go.Scatter(
+                x=eps_full.index, y=eps_full.values,
+                mode="lines",
+                name="월별 Fwd EPS",
+                line=dict(color="rgba(96,165,250,0.5)", width=1),
+                hovertemplate="%{x|%Y-%m}<br>₩%{y:,.0f}<extra></extra>",
+            ))
+
+            # 12개월 이동평균 (굵게)
+            fig_eps2.add_trace(go.Scatter(
+                x=ma12.index, y=ma12.values,
+                mode="lines",
+                name="12M 이동평균",
+                line=dict(color="#60a5fa", width=2.5),
+                hovertemplate="%{x|%Y-%m}<br>MA12 ₩%{y:,.0f}<extra></extra>",
+            ))
+
+            # 현재 EPS 수평선
+            fig_eps2.add_hline(
+                y=r.current_fwd_eps,
+                line_color="#f1f5f9", line_width=1.5, line_dash="dot",
+                annotation_text=f"현재 ₩{r.current_fwd_eps:,.0f}",
+                annotation_position="top right",
+                annotation_font_color="#f1f5f9", annotation_font_size=11,
+            )
+
+            # 0선
+            fig_eps2.add_hline(
+                y=0, line_color="rgba(255,255,255,0.2)", line_width=1,
+            )
+
+            # 연도별 영역 배경 (짝수 연도 음영)
+            years = sorted(set(eps_full.index.year))
+            for yr in years:
+                if yr % 2 == 0:
+                    yr_data = eps_full[eps_full.index.year == yr]
+                    if not yr_data.empty:
+                        fig_eps2.add_vrect(
+                            x0=yr_data.index.min(), x1=yr_data.index.max(),
+                            fillcolor="rgba(255,255,255,0.02)", line_width=0,
+                        )
+
+            fig_eps2.update_layout(
+                **CHART_LAYOUT, height=320,
+                margin=dict(l=10, r=10, t=40, b=30),
+                title=dict(
+                    text=f"{r.name} — 12M Fwd EPS 전체 이력  "
+                         f"({eps_full.index.min().year}~{eps_full.index.max().year})",
+                    x=0, font=dict(size=12, color="#c4c4e0"),
+                ),
+                xaxis=dict(**AX, tickformat="%Y"),
+                yaxis=dict(**AX, title="EPS (원)", tickformat=","),
+                legend=dict(orientation="h", y=1.06, x=0, font=dict(size=10)),
+                hovermode="x unified",
+            )
+            st.plotly_chart(fig_eps2, use_container_width=True)
+
+        with ce2:
+            # ── 연간 평균 EPS 바 차트 ──
+            eps_annual = eps_full.resample("YE").mean().dropna()
+            # YoY 성장률
+            yoy = eps_annual.pct_change() * 100
+
+            fig_ann = go.Figure()
+            bar_colors = [
+                "#34d399" if v >= 0 else "#f87171"
+                for v in eps_annual.values
+            ]
+            fig_ann.add_trace(go.Bar(
+                x=[str(d.year) for d in eps_annual.index],
+                y=eps_annual.values,
+                marker_color=bar_colors,
+                opacity=0.85,
+                name="연간 평균",
+                text=[f"₩{v:,.0f}" for v in eps_annual.values],
+                textposition="outside",
+                textfont=dict(size=8, color="#9ca3af"),
+                hovertemplate="%{x}년<br>₩%{y:,.0f}<extra></extra>",
+            ))
+
+            # YoY 성장률 라인 (보조축)
+            yoy_colors = ["#34d399" if v >= 0 else "#f87171" for v in yoy.dropna().values]
+            fig_ann.add_trace(go.Scatter(
+                x=[str(d.year) for d in yoy.dropna().index],
+                y=yoy.dropna().values,
+                mode="lines+markers",
+                name="YoY(%)",
+                yaxis="y2",
+                line=dict(color="#fbbf24", width=1.5, dash="dot"),
+                marker=dict(color=yoy_colors, size=5),
+                hovertemplate="%{x}년<br>YoY %{y:+.1f}%<extra></extra>",
+            ))
+
+            fig_ann.update_layout(
+                **CHART_LAYOUT, height=320,
+                margin=dict(l=10, r=40, t=40, b=30),
+                title=dict(text="연간 평균 EPS & YoY(%)",
+                           x=0, font=dict(size=12, color="#c4c4e0")),
+                xaxis=dict(showgrid=False, zeroline=False, tickangle=-45),
+                yaxis=dict(**AX, title="EPS (원)", tickformat=","),
+                yaxis2=dict(
+                    title="YoY(%)", overlaying="y", side="right",
+                    showgrid=False, zeroline=False,
+                    tickfont=dict(color="#fbbf24", size=9),
+                    titlefont=dict(color="#fbbf24"),
+                ),
+                legend=dict(orientation="h", y=1.06, x=0, font=dict(size=10)),
+                barmode="overlay",
+            )
+            st.plotly_chart(fig_ann, use_container_width=True)
+
