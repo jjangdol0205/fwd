@@ -206,9 +206,10 @@ section[data-testid="stSidebar"] * { color: #c4c4e0 !important; }
     .stTabs [data-baseweb="tab"] { font-size: 0.72rem !important; padding: 5px 8px !important; }
 }
 @media (max-width: 480px) {
-    .kpi-card  { flex: 1 1 100%; }
+    .kpi-card  { flex: 1 1 100%; padding: 10px; }
     .kpi-value { font-size: 1.25rem; }
     .target-grid { grid-template-columns: 1fr; gap: 6px; }
+    .detail-card { padding: 12px; }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -243,7 +244,7 @@ CHART_LAYOUT = dict(
     font=dict(color="#9ca3af", size=11),
 )
 # 공통 축 스타일
-AX = dict(gridcolor="rgba(255,255,255,0.05)", zerolinecolor="rgba(255,255,255,0.08)")
+AX = dict(gridcolor="rgba(255,255,255,0.05)", zerolinecolor="rgba(255,255,255,0.08)", tickfont=dict(size=10), title_font=dict(size=10))
 
 
 # ──────────────────────────────────────────────
@@ -747,14 +748,14 @@ if search_q and search_q.strip():
                             fig_total.add_trace(go.Scatter(x=pe_plot.index, y=pe_plot.values, mode="lines", name="Fwd P/E", line=dict(color="#a78bfa", width=2.5), yaxis="y3"))
                             
                             fig_total.update_layout(
-                                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(255,255,255,0.02)", font=dict(color="#9ca3af", size=11), 
-                                height=550, margin=dict(l=10, r=40, t=50, b=10), hovermode="x unified", 
-                                legend=dict(orientation="h", y=1.05, x=0, font=dict(size=10)),
+                                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(255,255,255,0.02)", font=dict(color="#9ca3af", size=10), 
+                                height=550, margin=dict(l=10, r=40, t=50, b=40), hovermode="x unified", 
+                                legend=dict(orientation="h", y=-0.15, x=0, font=dict(size=10)),
                                 title=f"3대 지표 통합 오버레이 차트 ({band_years}년)",
-                                xaxis=dict(domain=[0, 0.9], showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
-                                yaxis=dict(title=dict(text="주가 (원)", font=dict(color="#3b82f6")), tickfont=dict(color="#3b82f6"), showgrid=True, gridcolor="rgba(255,255,255,0.05)", tickformat=",.0f"),
-                                yaxis2=dict(title=dict(text="EPS (원)", font=dict(color="#60a5fa")), tickfont=dict(color="#60a5fa"), anchor="x", overlaying="y", side="right", showgrid=False, tickformat=",.0f"),
-                                yaxis3=dict(title=dict(text="P/E 배수", font=dict(color="#a78bfa")), tickfont=dict(color="#a78bfa"), anchor="free", overlaying="y", side="right", position=0.98, showgrid=False, tickformat=".1f", ticksuffix="x")
+                                xaxis=dict(domain=[0, 0.78], showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
+                                yaxis=dict(title=dict(text="주가 (원)", font=dict(color="#3b82f6", size=10)), tickfont=dict(color="#3b82f6", size=10), showgrid=True, gridcolor="rgba(255,255,255,0.05)", tickformat=",.0f"),
+                                yaxis2=dict(title=dict(text="EPS (원)", font=dict(color="#60a5fa", size=10)), tickfont=dict(color="#60a5fa", size=10), anchor="x", overlaying="y", side="right", showgrid=False, tickformat=",.0f"),
+                                yaxis3=dict(title=dict(text="P/E 배수", font=dict(color="#a78bfa", size=10)), tickfont=dict(color="#a78bfa", size=10), anchor="free", overlaying="y", side="right", position=0.96, showgrid=False, tickformat=".1f", ticksuffix="x")
                             )
                             st.plotly_chart(fig_total, use_container_width=True)
                 except Exception as _e:
@@ -1124,14 +1125,14 @@ with tab3:
                     fig_total.add_trace(go.Scatter(x=pe_plot.index, y=pe_plot.values, mode="lines", name="Fwd P/E", line=dict(color="#a78bfa", width=2.5), yaxis="y3"))
                     
                     fig_total.update_layout(
-                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(255,255,255,0.02)", font=dict(color="#9ca3af", size=11), 
-                        height=550, margin=dict(l=10, r=40, t=50, b=10), hovermode="x unified", 
-                        legend=dict(orientation="h", y=1.05, x=0, font=dict(size=10)),
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(255,255,255,0.02)", font=dict(color="#9ca3af", size=10), 
+                        height=550, margin=dict(l=10, r=40, t=50, b=40), hovermode="x unified", 
+                        legend=dict(orientation="h", y=-0.15, x=0, font=dict(size=10)),
                         title=f"3대 지표 통합 오버레이 차트 ({band_years}년)",
-                        xaxis=dict(domain=[0, 0.9], showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
-                        yaxis=dict(title=dict(text="주가 (원)", font=dict(color="#3b82f6")), tickfont=dict(color="#3b82f6"), showgrid=True, gridcolor="rgba(255,255,255,0.05)", tickformat=",.0f"),
-                        yaxis2=dict(title=dict(text="EPS (원)", font=dict(color="#60a5fa")), tickfont=dict(color="#60a5fa"), anchor="x", overlaying="y", side="right", showgrid=False, tickformat=",.0f"),
-                        yaxis3=dict(title=dict(text="P/E 배수", font=dict(color="#a78bfa")), tickfont=dict(color="#a78bfa"), anchor="free", overlaying="y", side="right", position=0.98, showgrid=False, tickformat=".1f", ticksuffix="x")
+                        xaxis=dict(domain=[0, 0.78], showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
+                        yaxis=dict(title=dict(text="주가 (원)", font=dict(color="#3b82f6", size=10)), tickfont=dict(color="#3b82f6", size=10), showgrid=True, gridcolor="rgba(255,255,255,0.05)", tickformat=",.0f"),
+                        yaxis2=dict(title=dict(text="EPS (원)", font=dict(color="#60a5fa", size=10)), tickfont=dict(color="#60a5fa", size=10), anchor="x", overlaying="y", side="right", showgrid=False, tickformat=",.0f"),
+                        yaxis3=dict(title=dict(text="P/E 배수", font=dict(color="#a78bfa", size=10)), tickfont=dict(color="#a78bfa", size=10), anchor="free", overlaying="y", side="right", position=0.96, showgrid=False, tickformat=".1f", ticksuffix="x")
                     )
                     st.plotly_chart(fig_total, use_container_width=True)
         except Exception as _e:
