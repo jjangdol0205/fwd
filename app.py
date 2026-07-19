@@ -852,7 +852,7 @@ with tab1:
                 use_container_width=True,
             )
 
-        st.dataframe(
+        event = st.dataframe(
             df_show, 
             column_config={
                 "현재가": st.column_config.NumberColumn("현재가", format="₩%,.0f"),
@@ -870,7 +870,16 @@ with tab1:
             use_container_width=True,
             height=min(80 + len(rows) * 36, 560),
             hide_index=True,
+            selection_mode="single-row",
+            on_select="rerun"
         )
+        
+        if hasattr(event, "selection") and event.selection.rows:
+            sel_idx = event.selection.rows[0]
+            sel_ticker = df_show.iloc[sel_idx]["코드"]
+            if st.session_state.get("sel_ticker") != sel_ticker:
+                st.session_state.sel_ticker = sel_ticker
+                st.rerun()
 
 
 # ══════════════════════════════════════════════
