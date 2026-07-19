@@ -158,8 +158,92 @@ def load_dataguide_eps(path: str) -> pd.DataFrame:
     return parse_dataguide_timeseries(path, sheet_idx=data_sheet_idx)
 
 
+def load_combined_dataguide(path: str):
+    """
+    DataGuide fwd_eps.xlsx (다중 아이템: EPS, 주가) 자동 로드
+    반환: (eps_df, price_df)
+    """
+    xl = pd.ExcelFile(path)
+    sheets = xl.sheet_names
+    data_sheet_idx = 1
+    for i, sh in enumerate(sheets):
+        df_check = pd.read_excel(path, sheet_name=i, header=None, nrows=2)
+        if "Refresh" in str(df_check.iloc[0, 0] if len(df_check) > 0 else ""):
+            data_sheet_idx = i
+            break
+            
+    df_raw = pd.read_excel(path, sheet_name=data_sheet_idx, header=None)
+    
+    header_row = -1
+    for i in range(min(20, len(df_raw))):
+        if str(df_raw.iloc[i, 0]).strip() == "코드":
+            header_row = i
+            break
+            
+    if header_row == -1:
+        raise ValueError("코드 헤더를 찾을 수 없습니다.")
+        
+    code_row = df_raw.iloc[header_row]
+    item_row = None
+    for i in range(header_row, min(header_row + 10, len(df_raw))):
+        if str(df_raw.iloc[i, 0]).strip() in ["항목명", "아이템명"]:
+            item_row = df_raw.iloc[i]
+            break
+            
+    data_start = header_row + 1
+    for i in range(header_row + 1, min(header_row + 15, len(df_raw))):
+        val = str(df_raw.iloc[i, 0]).strip()
+        try:
+            pd.to_datetime(val, errors="raise")
+            data_start = i
+            break
+        except Exception:
+            data_start = i + 1
+            
+    data_df = df_raw.iloc[data_start:].copy().dropna(how="all")
+    dates = pd.to_datetime(data_df.iloc[:, 0], errors="coerce")
+    valid = dates.notna()
+    dates = dates[valid]
+    data_df = data_df[valid]
+    
+    eps_cols = []
+    price_cols = []
+    
+    for idx in range(1, len(code_row)):
+        code = str(code_row.iloc[idx]).strip()
+        if pd.isna(code_row.iloc[idx]) or not code or code == "nan":
+            continue
+        if code.startswith("A") and code[1:].isdigit():
+            code = code[1:]
+        code = code.zfill(6)
+        
+        item = str(item_row.iloc[idx]).strip() if item_row is not None else ""
+        
+        if "EPS" in item.upper() or "EARNING" in item.upper():
+            eps_cols.append((idx, code))
+        else:
+            price_cols.append((idx, code))
+            
+    eps_values = data_df.iloc[:, [x[0] for x in eps_cols]].copy()
+    eps_values.columns = [x[1] for x in eps_cols]
+    eps_values.index = dates
+    eps_values = eps_values.apply(pd.to_numeric, errors="coerce")
+    
+    price_values = data_df.iloc[:, [x[0] for x in price_cols]].copy()
+    price_values.columns = [x[1] for x in price_cols]
+    price_values.index = dates
+    price_values = price_values.apply(pd.to_numeric, errors="coerce")
+    
+    eps_values = eps_values.resample("ME").last()
+    price_values = price_values.resample("ME").last()
+    
+    eps_values.index.name = "date"
+    price_values.index.name = "date"
+    
+    return eps_values.sort_index(), price_values.sort_index()
+
+
 if __name__ == "__main__":
-    import sys
     path = sys.argv[1] if len(sys.argv) > 1 else r"D:\Dataguide\data\fwd_eps.xlsx"
     eps = load_dataguide_eps(path)
     print(eps.tail(5).to_string())

@@ -16,7 +16,7 @@ ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT))
 
 from core.data_loader import load_excel
-from core.parse_dataguide_output import load_dataguide_eps
+from core.parse_dataguide_output import load_dataguide_eps, load_combined_dataguide
 from core.calculator import run_screener, PEBandResult
 from core.fetch_realtime_price import get_current_prices_batch
 
@@ -268,12 +268,15 @@ def load_all_data(band_years, _mtimes=(0, 0, 0, 0)):
     uni_path   = ROOT / "data" / "universe.csv"
 
     # ── 실제 데이터 파일이 있으면 로드 ──────────────
-    if price_path.exists() and eps_path.exists():
+    if eps_path.exists():
         import warnings
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            price_hist = load_excel(str(price_path))
-            eps_df     = load_dataguide_eps(str(eps_path))
+            eps_df, price_hist = load_combined_dataguide(str(eps_path))
+            
+            # price_hist가 비어있고 price.xlsx가 따로 있으면 기존 방식대로 로드
+            if price_hist.empty and price_path.exists():
+                price_hist = load_excel(str(price_path))
 
         names, markets = {}, {}
         if uni_path.exists():
