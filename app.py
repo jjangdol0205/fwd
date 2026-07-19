@@ -709,7 +709,7 @@ if search_q and search_q.strip():
                             fig_eps.add_trace(go.Scatter(x=e_plot.index, y=e_plot.values, mode="lines", name="Fwd EPS",
                                                          line=dict(color="#60a5fa", width=2.5), fill="tozeroy", fillcolor="rgba(96,165,250,0.1)"))
                             fig_eps.update_layout(**CHART_LAYOUT, height=450, title=f"12M Fwd EPS 추이 ({band_years}년)",
-                                                  xaxis=dict(**AX), yaxis=dict(**AX, title="EPS (원)"), hovermode="x unified")
+                                                  xaxis=dict(**AX), yaxis=dict(**AX, title="EPS (원)", tickformat=","), hovermode="x unified")
                             st.plotly_chart(fig_eps, use_container_width=True)
                             
                         with tab_price:
@@ -722,7 +722,7 @@ if search_q and search_q.strip():
                             fig_p.add_hline(y=sel_r.target_base, line_dash="dot", line_color="#fbbf24", annotation_text=f"Base 목표가 ₩{sel_r.target_base:,.0f}")
                             fig_p.add_hline(y=sel_r.target_bear, line_dash="dot", line_color="#f87171", annotation_text=f"Bear 목표가 ₩{sel_r.target_bear:,.0f}")
                             fig_p.add_trace(go.Scatter(x=[p_plot.index[-1]], y=[_rt], mode="markers+text", marker=dict(size=10, color="#f1f5f9"), text=[f" 현재가 ₩{_rt:,.0f}"], textposition="middle right", name="현재가", showlegend=False))
-                            fig_p.update_layout(**CHART_LAYOUT, height=450, title=f"주가 및 목표가 밴드 ({band_years}년)", xaxis=dict(**AX), yaxis=dict(**AX, title="주가 (원)"), hovermode="x unified")
+                            fig_p.update_layout(**CHART_LAYOUT, height=450, title=f"주가 및 목표가 밴드 ({band_years}년)", xaxis=dict(**AX), yaxis=dict(**AX, title="주가 (원)", tickformat=","), hovermode="x unified")
                             st.plotly_chart(fig_p, use_container_width=True)
                             
                         with tab_pe:
@@ -730,7 +730,7 @@ if search_q and search_q.strip():
                             fig_pe.add_trace(go.Scatter(x=pe_plot.index, y=pe_plot.values, mode="lines", name="Fwd P/E", line=dict(color="#a78bfa", width=2.5)))
                             for val, lbl, col in [(sel_r.pe_max, "Max", "#9ca3af"), (sel_r.pe_p75, "75th", "#34d399"), (sel_r.pe_median, "Med", "#fbbf24"), (sel_r.pe_p25, "25th", "#f87171"), (sel_r.pe_min, "Min", "#9ca3af")]:
                                 fig_pe.add_hline(y=val, line_dash="dash", line_color=col, line_width=1.5, annotation_text=f"{lbl} {val:.1f}x", annotation_position="top left", annotation_font_color=col)
-                            fig_pe.update_layout(**CHART_LAYOUT, height=450, title=f"12M Fwd P/E 추이 ({band_years}년)", xaxis=dict(**AX), yaxis=dict(**AX, title="P/E 배수"), hovermode="x unified")
+                            fig_pe.update_layout(**CHART_LAYOUT, height=450, title=f"12M Fwd P/E 추이 ({band_years}년)", xaxis=dict(**AX), yaxis=dict(**AX, title="P/E 배수", tickformat=".1f", ticksuffix="x"), hovermode="x unified")
                             st.plotly_chart(fig_pe, use_container_width=True)
                             
                         with tab_all:
@@ -752,9 +752,9 @@ if search_q and search_q.strip():
                                 legend=dict(orientation="h", y=1.05, x=0, font=dict(size=10)),
                                 title=f"3대 지표 통합 오버레이 차트 ({band_years}년)",
                                 xaxis=dict(domain=[0, 0.9], showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
-                                yaxis=dict(title=dict(text="주가 (원)", font=dict(color="#3b82f6")), tickfont=dict(color="#3b82f6"), showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
-                                yaxis2=dict(title=dict(text="EPS (원)", font=dict(color="#60a5fa")), tickfont=dict(color="#60a5fa"), anchor="x", overlaying="y", side="right", showgrid=False),
-                                yaxis3=dict(title=dict(text="P/E 배수", font=dict(color="#a78bfa")), tickfont=dict(color="#a78bfa"), anchor="free", overlaying="y", side="right", position=0.98, showgrid=False)
+                                yaxis=dict(title=dict(text="주가 (원)", font=dict(color="#3b82f6")), tickfont=dict(color="#3b82f6"), showgrid=True, gridcolor="rgba(255,255,255,0.05)", tickformat=","),
+                                yaxis2=dict(title=dict(text="EPS (원)", font=dict(color="#60a5fa")), tickfont=dict(color="#60a5fa"), anchor="x", overlaying="y", side="right", showgrid=False, tickformat=","),
+                                yaxis3=dict(title=dict(text="P/E 배수", font=dict(color="#a78bfa")), tickfont=dict(color="#a78bfa"), anchor="free", overlaying="y", side="right", position=0.98, showgrid=False, tickformat=".1f", ticksuffix="x")
                             )
                             st.plotly_chart(fig_total, use_container_width=True)
                 except Exception as _e:
@@ -1077,7 +1077,7 @@ with tab3:
                     fig_eps.add_trace(go.Scatter(x=e_plot.index, y=e_plot.values, mode="lines", name="Fwd EPS",
                                                  line=dict(color="#60a5fa", width=2.5), fill="tozeroy", fillcolor="rgba(96,165,250,0.1)"))
                     fig_eps.update_layout(**CHART_LAYOUT, height=450, title=f"12M Fwd EPS 추이 ({band_years}년)",
-                                          xaxis=dict(**AX), yaxis=dict(**AX, title="EPS (원)"), hovermode="x unified")
+                                          xaxis=dict(**AX), yaxis=dict(**AX, title="EPS (원)", tickformat=","), hovermode="x unified")
                     st.plotly_chart(fig_eps, use_container_width=True)
                     
                 with tab_price:
@@ -1090,7 +1090,7 @@ with tab3:
                     fig_p.add_hline(y=r.target_base, line_dash="dot", line_color="#fbbf24", annotation_text=f"Base 목표가 ₩{r.target_base:,.0f}")
                     fig_p.add_hline(y=r.target_bear, line_dash="dot", line_color="#f87171", annotation_text=f"Bear 목표가 ₩{r.target_bear:,.0f}")
                     fig_p.add_trace(go.Scatter(x=[p_plot.index[-1]], y=[rt_p], mode="markers+text", marker=dict(size=10, color="#f1f5f9"), text=[f" 현재가 ₩{rt_p:,.0f}"], textposition="middle right", name="현재가", showlegend=False))
-                    fig_p.update_layout(**CHART_LAYOUT, height=450, title=f"주가 및 목표가 밴드 ({band_years}년)", xaxis=dict(**AX), yaxis=dict(**AX, title="주가 (원)"), hovermode="x unified")
+                    fig_p.update_layout(**CHART_LAYOUT, height=450, title=f"주가 및 목표가 밴드 ({band_years}년)", xaxis=dict(**AX), yaxis=dict(**AX, title="주가 (원)", tickformat=","), hovermode="x unified")
                     st.plotly_chart(fig_p, use_container_width=True)
                     
                 with tab_pe:
@@ -1098,7 +1098,7 @@ with tab3:
                     fig_pe.add_trace(go.Scatter(x=pe_plot.index, y=pe_plot.values, mode="lines", name="Fwd P/E", line=dict(color="#a78bfa", width=2.5)))
                     for val, lbl, col in [(r.pe_max, "Max", "#9ca3af"), (r.pe_p75, "75th", "#34d399"), (r.pe_median, "Med", "#fbbf24"), (r.pe_p25, "25th", "#f87171"), (r.pe_min, "Min", "#9ca3af")]:
                         fig_pe.add_hline(y=val, line_dash="dash", line_color=col, line_width=1.5, annotation_text=f"{lbl} {val:.1f}x", annotation_position="top left", annotation_font_color=col)
-                    fig_pe.update_layout(**CHART_LAYOUT, height=450, title=f"12M Fwd P/E 추이 ({band_years}년)", xaxis=dict(**AX), yaxis=dict(**AX, title="P/E 배수"), hovermode="x unified")
+                    fig_pe.update_layout(**CHART_LAYOUT, height=450, title=f"12M Fwd P/E 추이 ({band_years}년)", xaxis=dict(**AX), yaxis=dict(**AX, title="P/E 배수", tickformat=".1f", ticksuffix="x"), hovermode="x unified")
                     st.plotly_chart(fig_pe, use_container_width=True)
                     
                 with tab_all:
@@ -1120,9 +1120,9 @@ with tab3:
                         legend=dict(orientation="h", y=1.05, x=0, font=dict(size=10)),
                         title=f"3대 지표 통합 오버레이 차트 ({band_years}년)",
                         xaxis=dict(domain=[0, 0.9], showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
-                        yaxis=dict(title=dict(text="주가 (원)", font=dict(color="#3b82f6")), tickfont=dict(color="#3b82f6"), showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
-                        yaxis2=dict(title=dict(text="EPS (원)", font=dict(color="#60a5fa")), tickfont=dict(color="#60a5fa"), anchor="x", overlaying="y", side="right", showgrid=False),
-                        yaxis3=dict(title=dict(text="P/E 배수", font=dict(color="#a78bfa")), tickfont=dict(color="#a78bfa"), anchor="free", overlaying="y", side="right", position=0.98, showgrid=False)
+                        yaxis=dict(title=dict(text="주가 (원)", font=dict(color="#3b82f6")), tickfont=dict(color="#3b82f6"), showgrid=True, gridcolor="rgba(255,255,255,0.05)", tickformat=","),
+                        yaxis2=dict(title=dict(text="EPS (원)", font=dict(color="#60a5fa")), tickfont=dict(color="#60a5fa"), anchor="x", overlaying="y", side="right", showgrid=False, tickformat=","),
+                        yaxis3=dict(title=dict(text="P/E 배수", font=dict(color="#a78bfa")), tickfont=dict(color="#a78bfa"), anchor="free", overlaying="y", side="right", position=0.98, showgrid=False, tickformat=".1f", ticksuffix="x")
                     )
                     st.plotly_chart(fig_total, use_container_width=True)
         except Exception as _e:
