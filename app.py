@@ -752,9 +752,9 @@ if search_q and search_q.strip():
                                 legend=dict(orientation="h", y=1.05, x=0, font=dict(size=10)),
                                 title=f"3대 지표 통합 오버레이 차트 ({band_years}년)",
                                 xaxis=dict(domain=[0, 0.9], showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
-                                yaxis=dict(title="주가 (원)", titlefont=dict(color="#3b82f6"), tickfont=dict(color="#3b82f6"), showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
-                                yaxis2=dict(title="EPS (원)", titlefont=dict(color="#60a5fa"), tickfont=dict(color="#60a5fa"), anchor="x", overlaying="y", side="right", showgrid=False),
-                                yaxis3=dict(title="P/E 배수", titlefont=dict(color="#a78bfa"), tickfont=dict(color="#a78bfa"), anchor="free", overlaying="y", side="right", position=0.98, showgrid=False)
+                                yaxis=dict(title=dict(text="주가 (원)", font=dict(color="#3b82f6")), tickfont=dict(color="#3b82f6"), showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
+                                yaxis2=dict(title=dict(text="EPS (원)", font=dict(color="#60a5fa")), tickfont=dict(color="#60a5fa"), anchor="x", overlaying="y", side="right", showgrid=False),
+                                yaxis3=dict(title=dict(text="P/E 배수", font=dict(color="#a78bfa")), tickfont=dict(color="#a78bfa"), anchor="free", overlaying="y", side="right", position=0.98, showgrid=False)
                             )
                             st.plotly_chart(fig_total, use_container_width=True)
                 except Exception as _e:
@@ -1120,9 +1120,9 @@ with tab3:
                         legend=dict(orientation="h", y=1.05, x=0, font=dict(size=10)),
                         title=f"3대 지표 통합 오버레이 차트 ({band_years}년)",
                         xaxis=dict(domain=[0, 0.9], showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
-                        yaxis=dict(title="주가 (원)", titlefont=dict(color="#3b82f6"), tickfont=dict(color="#3b82f6"), showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
-                        yaxis2=dict(title="EPS (원)", titlefont=dict(color="#60a5fa"), tickfont=dict(color="#60a5fa"), anchor="x", overlaying="y", side="right", showgrid=False),
-                        yaxis3=dict(title="P/E 배수", titlefont=dict(color="#a78bfa"), tickfont=dict(color="#a78bfa"), anchor="free", overlaying="y", side="right", position=0.98, showgrid=False)
+                        yaxis=dict(title=dict(text="주가 (원)", font=dict(color="#3b82f6")), tickfont=dict(color="#3b82f6"), showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
+                        yaxis2=dict(title=dict(text="EPS (원)", font=dict(color="#60a5fa")), tickfont=dict(color="#60a5fa"), anchor="x", overlaying="y", side="right", showgrid=False),
+                        yaxis3=dict(title=dict(text="P/E 배수", font=dict(color="#a78bfa")), tickfont=dict(color="#a78bfa"), anchor="free", overlaying="y", side="right", position=0.98, showgrid=False)
                     )
                     st.plotly_chart(fig_total, use_container_width=True)
         except Exception as _e:
