@@ -5,6 +5,7 @@ DataGuide 시계열 출력 Excel 파싱
 DataGuide 고유 포맷: 상단 8행 메타데이터 + 코드/날짜 매트릭스
 """
 
+import sys
 import pandas as pd
 import numpy as np
 import logging
@@ -20,7 +21,11 @@ _META_KEYWORDS = {
 }
 
 
-def parse_dataguide_timeseries(path: str, sheet_idx: int = 1) -> pd.DataFrame:
+def parse_dataguide_timeseries(
+    path: str,
+    sheet_idx: int = 1,
+    resample_monthly: bool = False,
+) -> pd.DataFrame:
     """
     DataGuide 시계열데이터 출력 Excel 파싱
 
@@ -117,16 +122,17 @@ def parse_dataguide_timeseries(path: str, sheet_idx: int = 1) -> pd.DataFrame:
     values.columns = tickers[: len(values.columns)]
     values.index = dates
 
-    # 월별 리샘플링 (일간 → 월말 기준)
-    freq_val = ""
-    for key in ("출력주기", "주기"):
-        if key in meta and meta[key]:
-            freq_val = str(meta[key][0])
-            break
+    # 월별 리샘플링 (resample_monthly=True 인 경우에만 일간 → 월말 기준 변환)
+    if resample_monthly:
+        freq_val = ""
+        for key in ("출력주기", "주기"):
+            if key in meta and meta[key]:
+                freq_val = str(meta[key][0])
+                break
 
-    if "일" in freq_val or "day" in freq_val.lower():
-        logger.info("  [리샘플] 일간 → 월별 변환")
-        values = values.resample("ME").last()
+        if "일" in freq_val or "day" in freq_val.lower():
+            logger.info("  [리샘플] 일간 → 월별 변환")
+            values = values.resample("ME").last()
 
     values.index.name = "date"
     values = values.sort_index()
@@ -139,7 +145,7 @@ def parse_dataguide_timeseries(path: str, sheet_idx: int = 1) -> pd.DataFrame:
     return values
 
 
-def load_dataguide_eps(path: str) -> pd.DataFrame:
+def load_dataguide_eps(path: str, resample_monthly: bool = False) -> pd.DataFrame:
     """
     DataGuide fwd_eps.xlsx 자동 로드
     Sheet1 = 코드 목록, Sheet2 = 실제 시계열 데이터
@@ -150,15 +156,18 @@ def load_dataguide_eps(path: str) -> pd.DataFrame:
     # DataGuide 출력 시트 찾기 (Sheet2 또는 Refresh가 있는 시트)
     data_sheet_idx = 1  # 기본값 Sheet2
     for i, sh in enumerate(sheets):
+        if "시계열" in sh:
+            data_sheet_idx = i
+            break
         df_check = pd.read_excel(path, sheet_name=i, header=None, nrows=2)
         if "Refresh" in str(df_check.iloc[0, 0] if len(df_check) > 0 else ""):
             data_sheet_idx = i
             break
 
-    return parse_dataguide_timeseries(path, sheet_idx=data_sheet_idx)
+    return parse_dataguide_timeseries(path, sheet_idx=data_sheet_idx, resample_monthly=resample_monthly)
 
 
-def load_combined_dataguide(path: str):
+def load_combined_dataguide(path: str, resample_monthly: bool = False):
     """
     DataGuide fwd_eps.xlsx (다중 아이템: EPS, 주가) 자동 로드
     반환: (eps_df, price_df)
@@ -167,6 +176,9 @@ def load_combined_dataguide(path: str):
     sheets = xl.sheet_names
     data_sheet_idx = 1
     for i, sh in enumerate(sheets):
+        if "시계열" in sh:
+            data_sheet_idx = i
+            break
         df_check = pd.read_excel(path, sheet_name=i, header=None, nrows=2)
         if "Refresh" in str(df_check.iloc[0, 0] if len(df_check) > 0 else ""):
             data_sheet_idx = i
@@ -186,13 +198,18 @@ def load_combined_dataguide(path: str):
     code_row = df_raw.iloc[header_row]
     item_row = None
     for i in range(header_row, min(header_row + 10, len(df_raw))):
-        if str(df_raw.iloc[i, 0]).strip() in ["항목명", "아이템명"]:
+        row_label = str(df_raw.iloc[i, 0]).strip()
+        if row_label in ["항목명", "아이템명", "아이템코드", "유형"]:
             item_row = df_raw.iloc[i]
-            break
+            if row_label in ["항목명", "아이템명"]:
+                break
             
     data_start = header_row + 1
     for i in range(header_row + 1, min(header_row + 15, len(df_raw))):
         val = str(df_raw.iloc[i, 0]).strip()
+        if val.lower() in _META_KEYWORDS or val in _META_KEYWORDS:
+            data_start = i + 1
+            continue
         try:
             pd.to_datetime(val, errors="raise")
             data_start = i
@@ -219,23 +236,37 @@ def load_combined_dataguide(path: str):
         
         item = str(item_row.iloc[idx]).strip() if item_row is not None else ""
         
-        if "EPS" in item.upper() or "EARNING" in item.upper():
+        if any(keyword in item.upper() for keyword in ["EPS", "EARNING", "FM300", "순이익"]):
             eps_cols.append((idx, code))
         else:
             price_cols.append((idx, code))
             
-    eps_values = data_df.iloc[:, [x[0] for x in eps_cols]].copy()
-    eps_values.columns = [x[1] for x in eps_cols]
-    eps_values.index = dates
-    eps_values = eps_values.apply(pd.to_numeric, errors="coerce")
+    # EPS 열이 비어 있고 price_cols만 채워진 경우 (fwd_eps.xlsx에서 아이템명 행 누락 시)
+    if len(eps_cols) == 0 and len(price_cols) > 0:
+        eps_cols = price_cols
+        price_cols = []
+
+    if eps_cols:
+        eps_values = data_df.iloc[:, [x[0] for x in eps_cols]].copy()
+        eps_values.columns = [x[1] for x in eps_cols]
+        eps_values.index = dates
+        eps_values = eps_values.apply(pd.to_numeric, errors="coerce")
+    else:
+        eps_values = pd.DataFrame(index=dates)
+
+    if price_cols:
+        price_values = data_df.iloc[:, [x[0] for x in price_cols]].copy()
+        price_values.columns = [x[1] for x in price_cols]
+        price_values.index = dates
+        price_values = price_values.apply(pd.to_numeric, errors="coerce")
+    else:
+        price_values = pd.DataFrame(index=dates)
     
-    price_values = data_df.iloc[:, [x[0] for x in price_cols]].copy()
-    price_values.columns = [x[1] for x in price_cols]
-    price_values.index = dates
-    price_values = price_values.apply(pd.to_numeric, errors="coerce")
-    
-    eps_values = eps_values.resample("ME").last()
-    price_values = price_values.resample("ME").last()
+    if resample_monthly:
+        if not eps_values.empty:
+            eps_values = eps_values.resample("ME").last()
+        if not price_values.empty:
+            price_values = price_values.resample("ME").last()
     
     eps_values.index.name = "date"
     price_values.index.name = "date"

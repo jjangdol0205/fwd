@@ -21,3 +21,18 @@ __pycache__/
 # Windows 임시
 Thumbs.db
 desktop.ini
+
+# 캐시 및 임시 파일
+data/fwd_eps_daily.parquet
+data/fwd_eps_daily.pkl
+data/2532DC60
+data/price_test.xlsx
+data/screening_result.xlsx
+.agents/
+check_env.py
+DEAD_ENDS.md
+ORIGINAL_REQUEST.md
+PROJECT.md
+TEST_INFRA.md
+TEST_READY.md
+
