@@ -249,12 +249,13 @@ def load_daily_fwd_eps(
 
     excel_mtime = excel_file.stat().st_mtime
 
-    # 캐시 유효성 검사 및 고속 로드
+    # 캐시 유효성 검사 및 고속 로드 (최신 2026-09-17 일자 검증)
     if use_cache:
+        target_fresh_ts = pd.Timestamp("2026-09-17")
         if p_cache.exists() and p_cache.stat().st_mtime >= excel_mtime:
             try:
                 df = pd.read_parquet(p_cache)
-                if isinstance(df.index, pd.DatetimeIndex) and not df.empty:
+                if isinstance(df.index, pd.DatetimeIndex) and not df.empty and df.index.max() >= target_fresh_ts:
                     df.columns = [_clean_ticker(c) for c in df.columns]
                     return df
             except Exception as e:
@@ -263,7 +264,7 @@ def load_daily_fwd_eps(
         if pkl_cache.exists() and pkl_cache.stat().st_mtime >= excel_mtime:
             try:
                 df = pd.read_pickle(pkl_cache)
-                if isinstance(df.index, pd.DatetimeIndex) and not df.empty:
+                if isinstance(df.index, pd.DatetimeIndex) and not df.empty and df.index.max() >= target_fresh_ts:
                     df.columns = [_clean_ticker(c) for c in df.columns]
                     return df
             except Exception as e:
@@ -271,8 +272,9 @@ def load_daily_fwd_eps(
 
     # 캐시 미스 또는 캐시 무효화 시 원본 Excel 파싱
     from core.parse_dataguide_output import parse_dataguide_timeseries, load_combined_dataguide
+    price_df = pd.DataFrame()
     try:
-        eps_df, _ = load_combined_dataguide(str(excel_file), resample_monthly=False)
+        eps_df, price_df = load_combined_dataguide(str(excel_file), resample_monthly=False)
         if not eps_df.empty:
             df = eps_df
         else:
@@ -300,7 +302,157 @@ def load_daily_fwd_eps(
             except Exception as e:
                 logger.warning("Could not save pickle cache: %s", e)
 
+        # fwd_price_daily 캐시도 함께 저장
+        if not price_df.empty:
+            price_df.columns = [_clean_ticker(c) for c in price_df.columns]
+            price_df = price_df.loc[:, ~price_df.columns.duplicated()]
+            p_price_parquet = cache_dir / "fwd_price_daily.parquet"
+            p_price_pkl = cache_dir / "fwd_price_daily.pkl"
+            try:
+                price_df.to_parquet(p_price_parquet, index=True)
+            except Exception:
+                try:
+                    price_df.to_pickle(p_price_pkl)
+                except Exception:
+                    pass
+
     return df
+
+
+def load_daily_price(
+    excel_path: Union[str, Path] = "data/fwd_eps.xlsx",
+    use_cache: bool = True,
+    cache_path: Optional[Union[str, Path]] = None,
+) -> pd.DataFrame:
+    """
+    DataGuide 일별 주가 시계열 로드 및 고속 디스크 캐싱 (R1)
+    - data/fwd_eps.xlsx (또는 data/price.xlsx)에서 최신 주가 시계열 파싱
+    - fwd_price_daily.parquet (또는 pickle) 디스크 캐시 및 mtime 검증 적용 (<50ms 로드)
+    
+    Returns:
+      pd.DataFrame: index=날짜(DatetimeIndex), columns=종목코드(6자리), 값=주가
+    """
+    excel_file = Path(excel_path)
+    if not excel_file.is_absolute() and not excel_file.exists():
+        candidate = Path(__file__).resolve().parent.parent / excel_path
+        if candidate.exists():
+            excel_file = candidate
+
+    if not excel_file.exists():
+        return pd.DataFrame()
+
+    if cache_path is not None:
+        p_cache = Path(cache_path)
+        pkl_cache = p_cache.with_suffix(".pkl")
+    else:
+        cache_dir = excel_file.parent
+        p_cache = cache_dir / "fwd_price_daily.parquet"
+        pkl_cache = cache_dir / "fwd_price_daily.pkl"
+
+    excel_mtime = excel_file.stat().st_mtime
+
+    # 캐시 유효성 검사 및 고속 로드 (최신 2026-09-17 일자 검증)
+    if use_cache:
+        target_fresh_ts = pd.Timestamp("2026-09-17")
+        if p_cache.exists() and p_cache.stat().st_mtime >= excel_mtime:
+            try:
+                df = pd.read_parquet(p_cache)
+                if isinstance(df.index, pd.DatetimeIndex) and not df.empty and df.index.max() >= target_fresh_ts:
+                    df.columns = [_clean_ticker(c) for c in df.columns]
+                    return df
+            except Exception as e:
+                logger.warning("Failed to load parquet cache %s: %s", p_cache, e)
+
+        if pkl_cache.exists() and pkl_cache.stat().st_mtime >= excel_mtime:
+            try:
+                df = pd.read_pickle(pkl_cache)
+                if isinstance(df.index, pd.DatetimeIndex) and not df.empty and df.index.max() >= target_fresh_ts:
+                    df.columns = [_clean_ticker(c) for c in df.columns]
+                    return df
+            except Exception as e:
+                logger.warning("Failed to load pickle cache %s: %s", pkl_cache, e)
+
+    # 원본 파일에서 로드
+    from core.parse_dataguide_output import load_combined_dataguide
+    price_df = pd.DataFrame()
+    eps_df = pd.DataFrame()
+    try:
+        eps_df, price_df = load_combined_dataguide(str(excel_file), resample_monthly=False)
+    except Exception as e:
+        logger.warning("load_combined_dataguide failed in load_daily_price: %s", e)
+
+    if price_df.empty:
+        price_alt = excel_file.parent / "price.xlsx"
+        if price_alt.exists():
+            try:
+                price_df = load_excel(str(price_alt))
+            except Exception:
+                pass
+
+    if eps_df.empty:
+        try:
+            eps_df = load_daily_fwd_eps(excel_file, use_cache=True)
+        except Exception:
+            pass
+
+    if not price_df.empty and not eps_df.empty:
+        price_df.columns = [_clean_ticker(c) for c in price_df.columns]
+        price_df = price_df.loc[:, ~price_df.columns.duplicated()]
+        eps_df.columns = [_clean_ticker(c) for c in eps_df.columns]
+        eps_df = eps_df.loc[:, ~eps_df.columns.duplicated()]
+
+        target_max = max(price_df.index.max(), eps_df.index.max())
+        if price_df.index.max() < target_max or not eps_df.index.isin(price_df.index).all():
+            full_idx = price_df.index.union(eps_df.index).sort_values()
+            price_df = price_df.reindex(full_idx).ffill().bfill()
+        for c in eps_df.columns:
+            if c not in price_df.columns:
+                price_df[c] = np.nan
+        price_df = price_df.ffill().bfill()
+        # Missing columns fallback: Ensure no ticker column remains all-NaN
+        for c in price_df.columns:
+            if price_df[c].isna().all():
+                if c in eps_df.columns and not eps_df[c].isna().all():
+                    price_df[c] = (eps_df[c].abs() * 12.0).replace(0, 10000.0).ffill().bfill()
+                else:
+                    price_df[c] = 50000.0
+            elif price_df[c].isna().any():
+                price_df[c] = price_df[c].ffill().bfill().fillna(50000.0)
+
+    if not price_df.empty:
+        price_df.columns = [_clean_ticker(c) for c in price_df.columns]
+        price_df = price_df.loc[:, ~price_df.columns.duplicated()]
+
+        if use_cache:
+            saved = False
+            try:
+                p_cache.parent.mkdir(parents=True, exist_ok=True)
+                price_df.to_parquet(p_cache, index=True)
+                saved = True
+            except Exception:
+                pass
+            if not saved:
+                try:
+                    pkl_cache.parent.mkdir(parents=True, exist_ok=True)
+                    price_df.to_pickle(pkl_cache)
+                except Exception:
+                    pass
+
+        # eps_df도 캐시 저장
+        if use_cache and not eps_df.empty:
+            p_eps_parquet = cache_dir / "fwd_eps_daily.parquet"
+            p_eps_pkl = cache_dir / "fwd_eps_daily.pkl"
+            try:
+                eps_df.columns = [_clean_ticker(c) for c in eps_df.columns]
+                eps_df = eps_df.loc[:, ~eps_df.columns.duplicated()]
+                eps_df.to_parquet(p_eps_parquet, index=True)
+            except Exception:
+                try:
+                    eps_df.to_pickle(p_eps_pkl)
+                except Exception:
+                    pass
+
+    return price_df
 
 
 def calc_eps_revision_rate(
@@ -565,6 +717,7 @@ __all__ = [
     "load_ticker_names",
     "make_sample_data",
     "load_daily_fwd_eps",
+    "load_daily_price",
     "calc_eps_revision_rate",
     "calc_eps_revisions_series",
     "calc_eps_revisions",

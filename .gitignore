@@ -25,6 +25,8 @@ desktop.ini
 # 캐시 및 임시 파일
 data/fwd_eps_daily.parquet
 data/fwd_eps_daily.pkl
+data/fwd_price_daily.parquet
+data/fwd_price_daily.pkl
 data/2532DC60
 data/price_test.xlsx
 data/screening_result.xlsx

@@ -225,10 +225,14 @@ def load_combined_dataguide(path: str, resample_monthly: bool = False):
     
     eps_cols = []
     price_cols = []
+    seen_eps_codes = set()
     
     for idx in range(1, len(code_row)):
-        code = str(code_row.iloc[idx]).strip()
-        if pd.isna(code_row.iloc[idx]) or not code or code == "nan":
+        raw_code = code_row.iloc[idx]
+        if pd.isna(raw_code):
+            continue
+        code = str(raw_code).strip()
+        if not code or code.lower() in ("nan", "none"):
             continue
         if code.startswith("A") and code[1:].isdigit():
             code = code[1:]
@@ -236,8 +240,20 @@ def load_combined_dataguide(path: str, resample_monthly: bool = False):
         
         item = str(item_row.iloc[idx]).strip() if item_row is not None else ""
         
-        if any(keyword in item.upper() for keyword in ["EPS", "EARNING", "FM300", "순이익"]):
+        is_eps = any(keyword in item.upper() for keyword in ["EPS", "EARNING", "FM300", "순이익"])
+        is_price = any(keyword in item.upper() for keyword in ["주가", "수정주가", "종가", "PRICE", "CLOSE", "S182800", "S18280000"])
+
+        if is_eps and not is_price:
             eps_cols.append((idx, code))
+            seen_eps_codes.add(code)
+        elif is_price:
+            price_cols.append((idx, code))
+        elif code in seen_eps_codes:
+            # Duplicate code in columns indicates second item (Price)
+            price_cols.append((idx, code))
+        elif is_eps:
+            eps_cols.append((idx, code))
+            seen_eps_codes.add(code)
         else:
             price_cols.append((idx, code))
             
@@ -261,12 +277,42 @@ def load_combined_dataguide(path: str, resample_monthly: bool = False):
         price_values = price_values.apply(pd.to_numeric, errors="coerce")
     else:
         price_values = pd.DataFrame(index=dates)
+
+    # 만약 price_values가 비어있는 경우, 다른 시트에서 시계열 탐색
+    if price_values.empty:
+        for i, sh in enumerate(sheets):
+            if i == data_sheet_idx:
+                continue
+            try:
+                sh_df = parse_dataguide_timeseries(path, sheet_idx=i, resample_monthly=False)
+                if not sh_df.empty:
+                    price_values = sh_df
+                    break
+            except Exception:
+                pass
+
+    if eps_values.empty:
+        for i, sh in enumerate(sheets):
+            if i == data_sheet_idx:
+                continue
+            try:
+                sh_df = parse_dataguide_timeseries(path, sheet_idx=i, resample_monthly=False)
+                if not sh_df.empty:
+                    eps_values = sh_df
+                    break
+            except Exception:
+                pass
     
     if resample_monthly:
         if not eps_values.empty:
             eps_values = eps_values.resample("ME").last()
         if not price_values.empty:
             price_values = price_values.resample("ME").last()
+
+    if not eps_values.empty:
+        eps_values = eps_values.loc[:, ~eps_values.columns.duplicated(keep="last")]
+    if not price_values.empty:
+        price_values = price_values.loc[:, ~price_values.columns.duplicated(keep="last")]
     
     eps_values.index.name = "date"
     price_values.index.name = "date"
