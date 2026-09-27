@@ -48,6 +48,12 @@ from tests.test_tier2_boundaries import (
 )
 from tests.test_tier3_combinations import TestTier3Combinations
 from tests.test_tier4_scenarios import TestTier4Scenarios
+from tests.test_adversarial_r1_r2 import (
+    TestR1DataPipelineAdversarial,
+    TestR2NavigationReactivityAdversarial,
+    TestAppAstAndCompilation,
+    TestR3HeadlessStreamlitExecution,
+)
 
 
 def build_suite() -> unittest.TestSuite:
@@ -98,6 +104,12 @@ def build_suite() -> unittest.TestSuite:
     suite.addTests(loader.loadTestsFromTestCase(TestTier3Combinations))
     suite.addTests(loader.loadTestsFromTestCase(TestTier4Scenarios))
 
+    # Adversarial R1, R2 & R3 Verification
+    suite.addTests(loader.loadTestsFromTestCase(TestR1DataPipelineAdversarial))
+    suite.addTests(loader.loadTestsFromTestCase(TestR2NavigationReactivityAdversarial))
+    suite.addTests(loader.loadTestsFromTestCase(TestAppAstAndCompilation))
+    suite.addTests(loader.loadTestsFromTestCase(TestR3HeadlessStreamlitExecution))
+
     return suite
 
 
@@ -108,8 +120,8 @@ def main():
     print("Dataguide Valuation & Earnings Momentum System - E2E Test Runner")
     print("=" * 70)
     print(f"Total Test Cases Discovered: {total_tests}")
-    print("Minimum Required Target:      161 tests")
-    print(f"Target Satisfied:             {'YES (>=161)' if total_tests >= 161 else 'NO'}")
+    print("Minimum Required Target:      186 tests")
+    print(f"Target Satisfied:             {'YES (>=186)' if total_tests >= 186 else 'NO'}")
     print("-" * 70)
 
     runner = unittest.TextTestRunner(verbosity=2)

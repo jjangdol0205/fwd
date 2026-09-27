@@ -49,6 +49,21 @@ from core.fetch_realtime_price import get_current_prices_batch
 # ──────────────────────────────────────────────
 # 공통 헬퍼 함수
 # ──────────────────────────────────────────────
+def _width_kwargs(func=None) -> dict:
+    """Return width parameter avoiding deprecation warnings for Streamlit functions (st.dataframe, st.plotly_chart)."""
+    try:
+        import inspect
+        target = func if func is not None else st.dataframe
+        params = inspect.signature(target).parameters
+        if "width" in params:
+            return {"width": "stretch"}
+    except Exception:
+        pass
+    return {"use_container_width": True}
+
+_dataframe_width_kwargs = _width_kwargs
+
+
 def signal_badge(pct: Optional[float]) -> str:
     if pct is None or np.isnan(pct):
         return '<span class="sig sig-neu">N/A</span>'
@@ -738,6 +753,7 @@ def render_stock_detail_view(
     """단일 종목 원페이지 상세 분석 뷰 (KPI 덱, 밴드 모델 스위처, 2단 연동 차트, 데이터 내보내기)"""
     mkt_str = markets.get(target_r.ticker, "")
     strat_sig = get_strategy_signal(target_r)
+    t_curr_p_str = f"₩{target_r.current_price:,.0f}" if (target_r.current_price is not None and not np.isnan(target_r.current_price)) else "N/A"
 
     st.markdown(f"""
     <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);
@@ -753,7 +769,7 @@ def render_stock_detail_view(
         </div>
         <div style="text-align:right;">
           <div style="font-size:0.75rem;color:#9ca3af;">실시간 현재가</div>
-          <div style="font-size:1.9rem;font-weight:800;color:#f1f5f9;">₩{target_r.current_price:,.0f}</div>
+          <div style="font-size:1.9rem;font-weight:800;color:#f1f5f9;">{t_curr_p_str}</div>
           <div style="margin-top:4px;">
             {strategy_badge_html(strat_sig)}
             <span style="margin-left:6px;">{signal_badge(target_r.pe_percentile)}</span>
@@ -816,10 +832,13 @@ def render_stock_detail_view(
     else:
         r_active.current_price = target_r.current_price
         r_active.current_fwd_pe = target_r.current_fwd_pe
-        if target_r.current_price > 0:
-            r_active.upside_bear = ((r_active.target_bear / target_r.current_price) - 1.0) * 100.0
-            r_active.upside_base = ((r_active.target_base / target_r.current_price) - 1.0) * 100.0
-            r_active.upside_bull = ((r_active.target_bull / target_r.current_price) - 1.0) * 100.0
+        if target_r.current_price is not None and not np.isnan(target_r.current_price) and target_r.current_price > 0:
+            if r_active.target_bear is not None and not np.isnan(r_active.target_bear):
+                r_active.upside_bear = ((r_active.target_bear / target_r.current_price) - 1.0) * 100.0
+            if r_active.target_base is not None and not np.isnan(r_active.target_base):
+                r_active.upside_base = ((r_active.target_base / target_r.current_price) - 1.0) * 100.0
+            if r_active.target_bull is not None and not np.isnan(r_active.target_bull):
+                r_active.upside_bull = ((r_active.target_bull / target_r.current_price) - 1.0) * 100.0
 
         r_active.sector = target_r.sector
         r_active.sector_median_pe = target_r.sector_median_pe
@@ -830,22 +849,53 @@ def render_stock_detail_view(
         r_active.is_value_trap = target_r.is_value_trap
         r_active.is_golden_cross = target_r.is_golden_cross
 
-    # 4-Card 애널리스트 KPI 덱
+    # 4-Card 애널리스트 KPI 덱 (Defensive None/NaN Protection)
+    up_base_val = r_active.upside_base if (r_active.upside_base is not None and not np.isnan(r_active.upside_base)) else 0.0
+    up_base_str = f"{r_active.upside_base:+.1f}%" if (r_active.upside_base is not None and not np.isnan(r_active.upside_base)) else "N/A"
+    up_col = "#34d399" if up_base_val >= 0 else "#f87171"
+
+    curr_p_str = f"₩{r_active.current_price:,.0f}" if (r_active.current_price is not None and not np.isnan(r_active.current_price)) else "N/A"
+    curr_pe_str = f"{r_active.current_fwd_pe:.1f}" if (r_active.current_fwd_pe is not None and not np.isnan(r_active.current_fwd_pe)) else "N/A"
+    pe_pct_str = f"{r_active.pe_percentile:.0f}%" if (r_active.pe_percentile is not None and not np.isnan(r_active.pe_percentile)) else "N/A"
+    pe_bar_pct = min(100.0, max(0.0, float(r_active.pe_percentile))) if (r_active.pe_percentile is not None and not np.isnan(r_active.pe_percentile)) else 0.0
+    pct_col = pe_bar_color(r_active.pe_percentile)
+
+    sec_med_str = f"{r_active.sector_median_pe:.1f}x" if (r_active.sector_median_pe is not None and not np.isnan(r_active.sector_median_pe)) else "N/A"
+    sec_pct_str = f"{r_active.sector_pe_percentile:.0f}%" if (r_active.sector_pe_percentile is not None and not np.isnan(r_active.sector_pe_percentile)) else "N/A"
+    sec_pct_col = pe_bar_color(r_active.sector_pe_percentile if r_active.sector_pe_percentile is not None else 50)
+
+    curr_eps_str = f"₩{r_active.current_fwd_eps:,.0f}" if (r_active.current_fwd_eps is not None and not np.isnan(r_active.current_fwd_eps)) else "N/A"
+    rev_1w_str = f"{r_active.eps_rev_1w:+.1f}%" if (r_active.eps_rev_1w is not None and not np.isnan(r_active.eps_rev_1w)) else "N/A"
+    rev_1m_str = f"{r_active.eps_rev_1m:+.1f}%" if (r_active.eps_rev_1m is not None and not np.isnan(r_active.eps_rev_1m)) else "N/A"
+    rev_3m_str = f"{r_active.eps_rev_3m:+.1f}%" if (r_active.eps_rev_3m is not None and not np.isnan(r_active.eps_rev_3m)) else "N/A"
+    col_1w = "#34d399" if (r_active.eps_rev_1w or 0) > 0 else ("#f87171" if (r_active.eps_rev_1w or 0) < 0 else "#9ca3af")
+    col_1m = "#34d399" if (r_active.eps_rev_1m or 0) > 0 else ("#f87171" if (r_active.eps_rev_1m or 0) < 0 else "#9ca3af")
+    col_3m = "#34d399" if (r_active.eps_rev_3m or 0) > 0 else ("#f87171" if (r_active.eps_rev_3m or 0) < 0 else "#9ca3af")
+
+    pe_mean_str = f"{r_active.pe_mean:.1f}x" if (r_active.pe_mean is not None and not np.isnan(r_active.pe_mean)) else "N/A"
+    pe_median_str = f"{r_active.pe_median:.1f}x" if (r_active.pe_median is not None and not np.isnan(r_active.pe_median)) else "N/A"
+
+    t_bear_p = f"₩{r_active.target_bear:,.0f}" if (r_active.target_bear is not None and not np.isnan(r_active.target_bear)) else "N/A"
+    t_bear_up = f"{r_active.upside_bear:+.1f}%" if (r_active.upside_bear is not None and not np.isnan(r_active.upside_bear)) else "N/A"
+    t_base_p = f"₩{r_active.target_base:,.0f}" if (r_active.target_base is not None and not np.isnan(r_active.target_base)) else "N/A"
+    t_base_up = f"{r_active.upside_base:+.1f}%" if (r_active.upside_base is not None and not np.isnan(r_active.upside_base)) else "N/A"
+    t_bull_p = f"₩{r_active.target_bull:,.0f}" if (r_active.target_bull is not None and not np.isnan(r_active.target_bull)) else "N/A"
+    t_bull_up = f"{r_active.upside_bull:+.1f}%" if (r_active.upside_bull is not None and not np.isnan(r_active.upside_bull)) else "N/A"
+
     kpi_c1, kpi_c2, kpi_c3, kpi_c4 = st.columns(4)
 
     with kpi_c1:
-        up_col = "#34d399" if r_active.upside_base >= 0 else "#f87171"
         st.markdown(f"""
         <div class="kpi-card" style="height:100%">
           <div class="kpi-label">1. 주가 & 전략 신호</div>
           <div style="font-size:1.6rem;font-weight:700;color:#f1f5f9;margin:4px 0 2px;">
-            ₩{r_active.current_price:,.0f}
+            {curr_p_str}
           </div>
           <div style="margin:6px 0;">
             {strategy_badge_html(get_strategy_signal(r_active))}
           </div>
           <div style="font-size:0.78rem;font-weight:600;color:{up_col};margin-top:4px;">
-            Base 업사이드 {r_active.upside_base:+.1f}%
+            Base 업사이드 {up_base_str}
           </div>
           <div style="font-size:0.72rem;color:#6b7280;margin-top:2px;">
             밸류에이션 평가: {signal_label(r_active.pe_percentile)}
@@ -854,20 +904,16 @@ def render_stock_detail_view(
         """, unsafe_allow_html=True)
 
     with kpi_c2:
-        pct_col = pe_bar_color(r_active.pe_percentile)
-        sec_med_str = f"{r_active.sector_median_pe:.1f}x" if r_active.sector_median_pe else "N/A"
-        sec_pct_str = f"{r_active.sector_pe_percentile:.0f}%" if r_active.sector_pe_percentile is not None else "N/A"
-        sec_pct_col = pe_bar_color(r_active.sector_pe_percentile if r_active.sector_pe_percentile is not None else 50)
         st.markdown(f"""
         <div class="kpi-card" style="height:100%">
           <div class="kpi-label">2. 밸류에이션 & 섹터 순위</div>
           <div style="font-size:1.6rem;font-weight:700;color:#818cf8;margin:4px 0 2px;">
-            {r_active.current_fwd_pe:.1f}<span style="font-size:1rem">x</span>
+            {curr_pe_str}<span style="font-size:1rem">x</span>
           </div>
           <div style="font-size:0.78rem;color:#9ca3af;margin-top:4px;">
-            역사적 백분위: <b style="color:{pct_col}">{r_active.pe_percentile:.0f}%</b>
+            역사적 백분위: <b style="color:{pct_col}">{pe_pct_str}</b>
           </div>
-          <div class="pe-bar"><div class="pe-fill" style="width:{min(100, max(0, r_active.pe_percentile)):.0f}%;background:{pct_col}"></div></div>
+          <div class="pe-bar"><div class="pe-fill" style="width:{pe_bar_pct:.0f}%;background:{pct_col}"></div></div>
           <div style="font-size:0.75rem;color:#9ca3af;margin-top:6px;">
             동일 섹터({r_active.sector}): 중앙값 <b style="color:#f1f5f9">{sec_med_str}</b> · 위치 <b style="color:{sec_pct_col}">{sec_pct_str}</b>
           </div>
@@ -875,17 +921,11 @@ def render_stock_detail_view(
         """, unsafe_allow_html=True)
 
     with kpi_c3:
-        rev_1w_str = f"{r_active.eps_rev_1w:+.1f}%" if r_active.eps_rev_1w is not None else "N/A"
-        rev_1m_str = f"{r_active.eps_rev_1m:+.1f}%" if r_active.eps_rev_1m is not None else "N/A"
-        rev_3m_str = f"{r_active.eps_rev_3m:+.1f}%" if r_active.eps_rev_3m is not None else "N/A"
-        col_1w = "#34d399" if (r_active.eps_rev_1w or 0) > 0 else ("#f87171" if (r_active.eps_rev_1w or 0) < 0 else "#9ca3af")
-        col_1m = "#34d399" if (r_active.eps_rev_1m or 0) > 0 else ("#f87171" if (r_active.eps_rev_1m or 0) < 0 else "#9ca3af")
-        col_3m = "#34d399" if (r_active.eps_rev_3m or 0) > 0 else ("#f87171" if (r_active.eps_rev_3m or 0) < 0 else "#9ca3af")
         st.markdown(f"""
         <div class="kpi-card" style="height:100%">
           <div class="kpi-label">3. 12M Fwd EPS & 리비전</div>
           <div style="font-size:1.6rem;font-weight:700;color:#60a5fa;margin:4px 0 2px;">
-            ₩{r_active.current_fwd_eps:,.0f}
+            {curr_eps_str}
           </div>
           <div style="font-size:0.75rem;color:#9ca3af;margin-top:6px;display:flex;justify-content:space-between;">
             <span>1W: <b style="color:{col_1w}">{rev_1w_str}</b></span>
@@ -893,7 +933,7 @@ def render_stock_detail_view(
             <span>3M: <b style="color:{col_3m}">{rev_3m_str}</b></span>
           </div>
           <div style="font-size:0.72rem;color:#6b7280;margin-top:6px;">
-            과거 {model_period}년 평균 P/E: {r_active.pe_mean:.1f}x · 중앙값: {r_active.pe_median:.1f}x
+            과거 {model_period}년 평균 P/E: {pe_mean_str} · 중앙값: {pe_median_str}
           </div>
         </div>
         """, unsafe_allow_html=True)
@@ -906,18 +946,18 @@ def render_stock_detail_view(
           <div class="target-grid" style="margin-top:6px;">
             <div class="target-box target-bear">
               <div class="t-label">Bear</div>
-              <div class="t-price t-bear-c">₩{r_active.target_bear:,.0f}</div>
-              <div class="t-upside t-bear-c">{r_active.upside_bear:+.1f}%</div>
+              <div class="t-price t-bear-c">{t_bear_p}</div>
+              <div class="t-upside t-bear-c">{t_bear_up}</div>
             </div>
             <div class="target-box target-base">
               <div class="t-label">Base</div>
-              <div class="t-price t-base-c">₩{r_active.target_base:,.0f}</div>
-              <div class="t-upside t-base-c">{r_active.upside_base:+.1f}%</div>
+              <div class="t-price t-base-c">{t_base_p}</div>
+              <div class="t-upside t-base-c">{t_base_up}</div>
             </div>
             <div class="target-box target-bull">
               <div class="t-label">Bull</div>
-              <div class="t-price t-bull-c">₩{r_active.target_bull:,.0f}</div>
-              <div class="t-upside t-bull-c">{r_active.upside_bull:+.1f}%</div>
+              <div class="t-price t-bull-c">{t_bull_p}</div>
+              <div class="t-upside t-bull-c">{t_bull_up}</div>
             </div>
           </div>
         </div>
@@ -1008,12 +1048,14 @@ def render_stock_detail_view(
                                                     line=dict(color=c_col, width=1.5, dash="dash")), row=1, col=1)
 
         latest_date = p_plot.index[-1]
+        p_marker_val = r_active.current_price if (r_active.current_price is not None and not np.isnan(r_active.current_price)) else (p_plot.iloc[-1] if not p_plot.empty else 0.0)
+        p_marker_str = f" 현재가 ₩{p_marker_val:,.0f}" if p_marker_val > 0 else " 현재가 N/A"
         fig_integrated.add_trace(
             go.Scatter(
-                x=[latest_date], y=[r_active.current_price],
+                x=[latest_date], y=[p_marker_val],
                 mode="markers+text",
                 marker=dict(size=9, color="#ffffff", line=dict(color="#38bdf8", width=2)),
-                text=[f" 현재가 ₩{r_active.current_price:,.0f}"],
+                text=[p_marker_str],
                 textposition="middle right",
                 name="현재가",
                 showlegend=False
@@ -1021,15 +1063,18 @@ def render_stock_detail_view(
             row=1, col=1
         )
 
-        fig_integrated.add_hline(y=r_active.target_bull, line_dash="dot", line_color="#34d399", line_width=1,
-                                annotation_text=f"Bull ₩{r_active.target_bull:,.0f} ({r_active.upside_bull:+.1f}%)",
-                                annotation_position="top left", annotation_font=dict(size=9, color="#34d399"), row=1, col=1)
-        fig_integrated.add_hline(y=r_active.target_base, line_dash="dot", line_color="#fbbf24", line_width=1,
-                                annotation_text=f"Base ₩{r_active.target_base:,.0f} ({r_active.upside_base:+.1f}%)",
-                                annotation_position="top left", annotation_font=dict(size=9, color="#fbbf24"), row=1, col=1)
-        fig_integrated.add_hline(y=r_active.target_bear, line_dash="dot", line_color="#f87171", line_width=1,
-                                annotation_text=f"Bear ₩{r_active.target_bear:,.0f} ({r_active.upside_bear:+.1f}%)",
-                                annotation_position="top left", annotation_font=dict(size=9, color="#f87171"), row=1, col=1)
+        if r_active.target_bull is not None and not np.isnan(r_active.target_bull):
+            fig_integrated.add_hline(y=r_active.target_bull, line_dash="dot", line_color="#34d399", line_width=1,
+                                    annotation_text=f"Bull ₩{r_active.target_bull:,.0f} ({r_active.upside_bull:+.1f}%)" if (r_active.upside_bull is not None and not np.isnan(r_active.upside_bull)) else "Bull",
+                                    annotation_position="top left", annotation_font=dict(size=9, color="#34d399"), row=1, col=1)
+        if r_active.target_base is not None and not np.isnan(r_active.target_base):
+            fig_integrated.add_hline(y=r_active.target_base, line_dash="dot", line_color="#fbbf24", line_width=1,
+                                    annotation_text=f"Base ₩{r_active.target_base:,.0f} ({r_active.upside_base:+.1f}%)" if (r_active.upside_base is not None and not np.isnan(r_active.upside_base)) else "Base",
+                                    annotation_position="top left", annotation_font=dict(size=9, color="#fbbf24"), row=1, col=1)
+        if r_active.target_bear is not None and not np.isnan(r_active.target_bear):
+            fig_integrated.add_hline(y=r_active.target_bear, line_dash="dot", line_color="#f87171", line_width=1,
+                                    annotation_text=f"Bear ₩{r_active.target_bear:,.0f} ({r_active.upside_bear:+.1f}%)" if (r_active.upside_bear is not None and not np.isnan(r_active.upside_bear)) else "Bear",
+                                    annotation_position="top left", annotation_font=dict(size=9, color="#f87171"), row=1, col=1)
 
         # Subplot 2 (Lower): 12M Fwd EPS 추이 & P/E 멀티플
         fig_integrated.add_trace(
@@ -1083,7 +1128,7 @@ def render_stock_detail_view(
         fig_integrated.update_yaxes(title_text="EPS (원)", tickformat=",.0f", showgrid=True, gridcolor="rgba(255,255,255,0.04)", row=2, col=1, secondary_y=False)
         fig_integrated.update_yaxes(title_text="P/E 배수", tickformat=".1f", ticksuffix="x", showgrid=False, row=2, col=1, secondary_y=True)
 
-        st.plotly_chart(fig_integrated, use_container_width=True)
+        st.plotly_chart(fig_integrated, key=f"{key_prefix}_plotly_{target_r.ticker}", **_width_kwargs(st.plotly_chart))
 
     # 종목별 리서치 데이터 내보내기 (Tab 2 또는 인라인 필요 시)
     if not is_inline or df_screener_all is not None:
@@ -1099,15 +1144,22 @@ def render_stock_detail_view(
                     "Bear 업사이드%", "Base 업사이드%", "Bull 업사이드%",
                 ],
                 "값": [
-                    r_active.name, r_active.ticker, r_active.sector, mkt_str, strat_sig, f"{r_active.current_price:,.0f}",
-                    f"{r_active.current_fwd_eps:,.0f}", f"{r_active.eps_rev_1w:+.1f}%" if r_active.eps_rev_1w is not None else "N/A",
-                    f"{r_active.eps_rev_1m:+.1f}%" if r_active.eps_rev_1m is not None else "N/A",
-                    f"{r_active.eps_rev_3m:+.1f}%" if r_active.eps_rev_3m is not None else "N/A",
-                    f"{r_active.current_fwd_pe:.2f}x", f"{r_active.pe_percentile:.1f}%",
-                    f"{r_active.sector_median_pe:.2f}x" if r_active.sector_median_pe else "N/A",
-                    f"{r_active.sector_pe_percentile:.1f}%" if r_active.sector_pe_percentile is not None else "N/A",
-                    f"{r_active.target_bear:,.0f}", f"{r_active.target_base:,.0f}", f"{r_active.target_bull:,.0f}",
-                    f"{r_active.upside_bear:+.1f}%", f"{r_active.upside_base:+.1f}%", f"{r_active.upside_bull:+.1f}%",
+                    r_active.name, r_active.ticker, r_active.sector, mkt_str, strat_sig,
+                    f"{r_active.current_price:,.0f}" if (r_active.current_price is not None and not np.isnan(r_active.current_price)) else "N/A",
+                    f"{r_active.current_fwd_eps:,.0f}" if (r_active.current_fwd_eps is not None and not np.isnan(r_active.current_fwd_eps)) else "N/A",
+                    f"{r_active.eps_rev_1w:+.1f}%" if (r_active.eps_rev_1w is not None and not np.isnan(r_active.eps_rev_1w)) else "N/A",
+                    f"{r_active.eps_rev_1m:+.1f}%" if (r_active.eps_rev_1m is not None and not np.isnan(r_active.eps_rev_1m)) else "N/A",
+                    f"{r_active.eps_rev_3m:+.1f}%" if (r_active.eps_rev_3m is not None and not np.isnan(r_active.eps_rev_3m)) else "N/A",
+                    f"{r_active.current_fwd_pe:.2f}x" if (r_active.current_fwd_pe is not None and not np.isnan(r_active.current_fwd_pe)) else "N/A",
+                    f"{r_active.pe_percentile:.1f}%" if (r_active.pe_percentile is not None and not np.isnan(r_active.pe_percentile)) else "N/A",
+                    f"{r_active.sector_median_pe:.2f}x" if (r_active.sector_median_pe is not None and not np.isnan(r_active.sector_median_pe)) else "N/A",
+                    f"{r_active.sector_pe_percentile:.1f}%" if (r_active.sector_pe_percentile is not None and not np.isnan(r_active.sector_pe_percentile)) else "N/A",
+                    f"{r_active.target_bear:,.0f}" if (r_active.target_bear is not None and not np.isnan(r_active.target_bear)) else "N/A",
+                    f"{r_active.target_base:,.0f}" if (r_active.target_base is not None and not np.isnan(r_active.target_base)) else "N/A",
+                    f"{r_active.target_bull:,.0f}" if (r_active.target_bull is not None and not np.isnan(r_active.target_bull)) else "N/A",
+                    f"{r_active.upside_bear:+.1f}%" if (r_active.upside_bear is not None and not np.isnan(r_active.upside_bear)) else "N/A",
+                    f"{r_active.upside_base:+.1f}%" if (r_active.upside_base is not None and not np.isnan(r_active.upside_base)) else "N/A",
+                    f"{r_active.upside_bull:+.1f}%" if (r_active.upside_bull is not None and not np.isnan(r_active.upside_bull)) else "N/A",
                 ]
             })
             buf_stock = _io.BytesIO()
@@ -1277,13 +1329,22 @@ def main():
         sig = get_strategy_signal(r)
         if strategy_filter and sig not in strategy_filter:
             continue
-        if r.upside_base < min_upside:
+        if r.upside_base is not None and not np.isnan(r.upside_base):
+            if r.upside_base < min_upside:
+                continue
+        elif min_upside > -50:
             continue
-        if not (pe_pct_range[0] <= r.pe_percentile <= pe_pct_range[1]):
+        if r.pe_percentile is not None and not np.isnan(r.pe_percentile):
+            if not (pe_pct_range[0] <= r.pe_percentile <= pe_pct_range[1]):
+                continue
+        elif pe_pct_range[0] > 0:
             continue
         filtered_results.append(r)
 
-    filtered_results.sort(key=lambda r: r.upside_base, reverse=True)
+    filtered_results.sort(
+        key=lambda r: (float(r.upside_base) if (r.upside_base is not None and not np.isnan(r.upside_base)) else -9999.0),
+        reverse=True
+    )
 
     # ──────────────────────────────────────────
     # 4. 헤더 및 글로벌 KPI 요약
@@ -1312,9 +1373,10 @@ def main():
     gc_cnt = sum(1 for r in filtered_results if r.is_golden_cross or get_strategy_signal(r) == "✨골든크로스")
     vt_cnt = sum(1 for r in filtered_results if r.is_value_trap or get_strategy_signal(r) == "⚠️밸류트랩")
     top_mom_cnt = sum(1 for r in filtered_results if (r.eps_rev_1m or 0) >= 3.0)
-    avg_upside = np.mean([r.upside_base for r in filtered_results]) if filtered_results else 0.0
+    valid_ups = [r.upside_base for r in filtered_results if r.upside_base is not None and not np.isnan(r.upside_base)]
+    avg_upside = float(np.mean(valid_ups)) if valid_ups else 0.0
     top_pick = filtered_results[0].name if filtered_results else "-"
-    top_pick_up = filtered_results[0].upside_base if filtered_results else 0.0
+    top_pick_up = (filtered_results[0].upside_base if (filtered_results and filtered_results[0].upside_base is not None and not np.isnan(filtered_results[0].upside_base)) else 0.0)
 
     st.markdown(f"""
     <div class="kpi-row">
@@ -1364,24 +1426,24 @@ def main():
             "코드": r.ticker,
             "섹터": r.sector,
             "지수": mkt,
-            "현재가": float(r.current_price),
-            "Fwd EPS": float(r.current_fwd_eps),
-            "1W %": float(r.eps_rev_1w) if r.eps_rev_1w is not None else np.nan,
-            "1M %": float(r.eps_rev_1m) if r.eps_rev_1m is not None else np.nan,
-            "3M %": float(r.eps_rev_3m) if r.eps_rev_3m is not None else np.nan,
-            "Fwd P/E": float(r.current_fwd_pe) if r.current_fwd_pe is not None else np.nan,
-            "P/E 위치(%)": float(r.pe_percentile) if r.pe_percentile is not None else np.nan,
-            "섹터 P/E 위치(%)": float(r.sector_pe_percentile) if r.sector_pe_percentile is not None else np.nan,
-            "Bear목표": float(r.target_bear),
-            "Base목표": float(r.target_base),
-            "Bull목표": float(r.target_bull),
-            "Base%": float(r.upside_base),
-            "pe_percentile": float(r.pe_percentile) if r.pe_percentile is not None else 100.0,
-            "sector_pe_percentile": float(r.sector_pe_percentile) if r.sector_pe_percentile is not None else 100.0,
-            "eps_rev_1m": float(r.eps_rev_1m) if r.eps_rev_1m is not None else -999.0,
-            "current_fwd_eps": float(r.current_fwd_eps),
-            "current_fwd_pe": float(r.current_fwd_pe) if r.current_fwd_pe is not None else 999.0,
-            "upside_base": float(r.upside_base),
+            "현재가": float(r.current_price) if (r.current_price is not None and not np.isnan(r.current_price)) else np.nan,
+            "Fwd EPS": float(r.current_fwd_eps) if (r.current_fwd_eps is not None and not np.isnan(r.current_fwd_eps)) else np.nan,
+            "1W %": float(r.eps_rev_1w) if (r.eps_rev_1w is not None and not np.isnan(r.eps_rev_1w)) else np.nan,
+            "1M %": float(r.eps_rev_1m) if (r.eps_rev_1m is not None and not np.isnan(r.eps_rev_1m)) else np.nan,
+            "3M %": float(r.eps_rev_3m) if (r.eps_rev_3m is not None and not np.isnan(r.eps_rev_3m)) else np.nan,
+            "Fwd P/E": float(r.current_fwd_pe) if (r.current_fwd_pe is not None and not np.isnan(r.current_fwd_pe)) else np.nan,
+            "P/E 위치(%)": float(r.pe_percentile) if (r.pe_percentile is not None and not np.isnan(r.pe_percentile)) else np.nan,
+            "섹터 P/E 위치(%)": float(r.sector_pe_percentile) if (r.sector_pe_percentile is not None and not np.isnan(r.sector_pe_percentile)) else np.nan,
+            "Bear목표": float(r.target_bear) if (r.target_bear is not None and not np.isnan(r.target_bear)) else np.nan,
+            "Base목표": float(r.target_base) if (r.target_base is not None and not np.isnan(r.target_base)) else np.nan,
+            "Bull목표": float(r.target_bull) if (r.target_bull is not None and not np.isnan(r.target_bull)) else np.nan,
+            "Base%": float(r.upside_base) if (r.upside_base is not None and not np.isnan(r.upside_base)) else np.nan,
+            "pe_percentile": float(r.pe_percentile) if (r.pe_percentile is not None and not np.isnan(r.pe_percentile)) else 100.0,
+            "sector_pe_percentile": float(r.sector_pe_percentile) if (r.sector_pe_percentile is not None and not np.isnan(r.sector_pe_percentile)) else 100.0,
+            "eps_rev_1m": float(r.eps_rev_1m) if (r.eps_rev_1m is not None and not np.isnan(r.eps_rev_1m)) else -999.0,
+            "current_fwd_eps": float(r.current_fwd_eps) if (r.current_fwd_eps is not None and not np.isnan(r.current_fwd_eps)) else 0.0,
+            "current_fwd_pe": float(r.current_fwd_pe) if (r.current_fwd_pe is not None and not np.isnan(r.current_fwd_pe)) else 999.0,
+            "upside_base": float(r.upside_base) if (r.upside_base is not None and not np.isnan(r.upside_base)) else 0.0,
         })
     df_table_all = pd.DataFrame(table_rows)
     df_screener_all = df_table_all[display_cols].copy() if not df_table_all.empty else pd.DataFrame(columns=display_cols)
@@ -1410,10 +1472,19 @@ def main():
     if "_last_seen_selector" not in st.session_state:
         st.session_state._last_seen_selector = st.session_state.get("dashboard_stock_selector")
 
+    # 0) 지연 주식 셀렉터 반영 (사전 지연 반영 아키텍처)
+    if "_pending_stock_selector" in st.session_state:
+        pending_sel = st.session_state.pop("_pending_stock_selector")
+        if pending_sel in all_options:
+            st.session_state["dashboard_stock_selector"] = pending_sel
+            st.session_state._last_seen_selector = pending_sel
+
     # 1) 외부 이벤트(검색 카드 또는 테이블 클릭)로 sel_ticker가 변경된 경우 선제 동기화
     if st.session_state.sel_ticker != st.session_state._last_seen_sel_ticker:
         if st.session_state.sel_ticker and st.session_state.sel_ticker in ticker_to_opt:
-            st.session_state["dashboard_stock_selector"] = ticker_to_opt[st.session_state.sel_ticker]
+            target_opt = ticker_to_opt[st.session_state.sel_ticker]
+            st.session_state["dashboard_stock_selector"] = target_opt
+            st.session_state["_pending_stock_selector"] = target_opt
         st.session_state._last_seen_sel_ticker = st.session_state.sel_ticker
         st.session_state._last_seen_selector = st.session_state.get("dashboard_stock_selector")
         st.session_state._synced_ticker = st.session_state.sel_ticker
@@ -1432,7 +1503,19 @@ def main():
         if st.session_state.get("dashboard_stock_selector") not in all_options:
             fallback = ticker_to_opt.get(st.session_state.sel_ticker, all_options[0])
             st.session_state["dashboard_stock_selector"] = fallback
+            st.session_state["_pending_stock_selector"] = fallback
             st.session_state._last_seen_selector = fallback
+
+    # 4) Dynamic Key Versioning & 사전 지연 반영 패턴을 적용한 안전한 검색창
+    if "_search_input_version" not in st.session_state:
+        st.session_state["_search_input_version"] = 0
+
+    current_search_key = f"global_search_input_v{st.session_state.get('_search_input_version', 0)}"
+
+    if "_pending_search_input" in st.session_state:
+        _pending_val = st.session_state.pop("_pending_search_input")
+        st.session_state["global_search_input"] = _pending_val
+        st.session_state[current_search_key] = _pending_val
 
     sc1, sc2 = st.columns([5, 1])
     with sc1:
@@ -1440,8 +1523,10 @@ def main():
             "종목 검색",
             placeholder="🔍  종목명 또는 6자리 코드 입력 (예: 삼성전자, 005930, 현대차, 반도체)",
             label_visibility="collapsed",
-            key="global_search_input",
+            key=current_search_key,
         )
+        st.session_state["global_search_input"] = search_q
+
     with sc2:
         if st.button("❌ 선택 초기화", use_container_width=True):
             st.session_state.sel_ticker = None
@@ -1450,20 +1535,25 @@ def main():
             st.session_state._last_seen_selector = all_options[0] if all_options else None
             st.session_state._last_table_clicked_ticker = None
             if all_options:
-                st.session_state["dashboard_stock_selector"] = all_options[0]
+                st.session_state["_pending_stock_selector"] = all_options[0]
             elif "dashboard_stock_selector" in st.session_state:
                 del st.session_state["dashboard_stock_selector"]
-            if "global_search_input" in st.session_state:
-                st.session_state.global_search_input = ""
+            # Dynamic Key Versioning 및 사전 지연 초기화 (StreamlitWidgetAlreadyInstantiatedError 완전 방지)
+            st.session_state["_pending_search_input"] = ""
+            st.session_state["_search_input_version"] = st.session_state.get("_search_input_version", 0) + 1
+            st.session_state["global_search_input"] = ""
             st.rerun()
 
     if search_q and search_q.strip():
         sq = search_q.strip().lower()
         matches = [
             r for r in all_results
-            if sq in r.name.lower() or sq in r.ticker.lower() or sq in r.sector.lower()
+            if sq in (r.name or "").lower() or sq in (r.ticker or "").lower() or sq in (r.sector or "").lower()
         ]
-        matches.sort(key=lambda r: r.upside_base, reverse=True)
+        matches.sort(
+            key=lambda r: (float(r.upside_base) if (r.upside_base is not None and not np.isnan(r.upside_base)) else -9999.0),
+            reverse=True
+        )
 
         if not matches:
             st.info(f"🔍 '{search_q}' 검색 결과가 없습니다.")
@@ -1478,15 +1568,20 @@ def main():
                 with srch_cols[idx]:
                     is_sel = (st.session_state.sel_ticker == m.ticker)
                     bcol = "#818cf8" if is_sel else "rgba(255,255,255,0.1)"
-                    up_c = "#34d399" if m.upside_base >= 0 else "#f87171"
+                    m_has_up = (m.upside_base is not None and not np.isnan(m.upside_base))
+                    up_c = "#34d399" if (m_has_up and m.upside_base >= 0) else "#f87171"
+                    m_p_str = f"₩{m.current_price:,.0f}" if (m.current_price is not None and not np.isnan(m.current_price)) else "N/A"
+                    m_pe_str = f"{m.current_fwd_pe:.1f}x" if (m.current_fwd_pe is not None and not np.isnan(m.current_fwd_pe)) else "N/A"
+                    m_pct_str = f"({m.pe_percentile:.0f}%)" if (m.pe_percentile is not None and not np.isnan(m.pe_percentile)) else ""
+                    m_up_str = f"Base {m.upside_base:+.1f}%" if m_has_up else "Base N/A"
                     st.markdown(f"""
                     <div style="background:rgba(255,255,255,0.03);border:1.5px solid {bcol};
                                 border-radius:12px;padding:12px 14px;margin-bottom:8px;">
                       <div style="font-size:0.7rem;color:#6b7280;">{m.ticker} · {m.sector}</div>
                       <div style="font-size:1.05rem;font-weight:700;color:#f1f5f9;margin:2px 0;">{m.name}</div>
-                      <div style="font-size:0.8rem;color:#9ca3af;">현재가: <b>₩{m.current_price:,.0f}</b></div>
-                      <div style="font-size:0.78rem;color:#9ca3af;margin-top:2px;">Fwd P/E: <b>{m.current_fwd_pe:.1f}x</b> ({m.pe_percentile:.0f}%)</div>
-                      <div style="font-size:0.82rem;font-weight:700;color:{up_c};margin-top:4px;">Base {m.upside_base:+.1f}%</div>
+                      <div style="font-size:0.8rem;color:#9ca3af;">현재가: <b>{m_p_str}</b></div>
+                      <div style="font-size:0.78rem;color:#9ca3af;margin-top:2px;">Fwd P/E: <b>{m_pe_str}</b> {m_pct_str}</div>
+                      <div style="font-size:0.82rem;font-weight:700;color:{up_c};margin-top:4px;">{m_up_str}</div>
                     </div>
                     """, unsafe_allow_html=True)
                     if st.button("📊 상세 분석 보기", key=f"btn_search_{m.ticker}", use_container_width=True,
@@ -1495,11 +1590,9 @@ def main():
                         st.session_state._last_seen_sel_ticker = m.ticker
                         st.session_state._synced_ticker = m.ticker
                         st.session_state["_pending_nav_tab"] = TAB_DASHBOARD
-                        st.session_state["main_nav_tab_radio"] = TAB_DASHBOARD
                         opt_candidate = ticker_to_opt.get(m.ticker)
                         if opt_candidate:
-                            st.session_state["dashboard_stock_selector"] = opt_candidate
-                            st.session_state._last_seen_selector = opt_candidate
+                            st.session_state["_pending_stock_selector"] = opt_candidate
                         st.rerun()
 
     # 인라인 상세 분석 뷰 (선택된 종목이 있을 때 검색 영역 하단에 즉시 표출)
@@ -1632,7 +1725,7 @@ def main():
                     "Bull목표": st.column_config.NumberColumn("Bull목표", format="₩%,.0f"),
                     "Base%": st.column_config.NumberColumn("Base%", format="%+.1f%%"),
                 },
-                use_container_width=True,
+                **_dataframe_width_kwargs(),
                 height=min(80 + len(df_display) * 36, 560),
                 hide_index=True,
                 selection_mode="single-row",
@@ -1651,8 +1744,7 @@ def main():
                         st.session_state["_pending_nav_tab"] = TAB_DASHBOARD
                         opt_candidate = ticker_to_opt.get(clicked_ticker)
                         if opt_candidate:
-                            st.session_state["dashboard_stock_selector"] = opt_candidate
-                            st.session_state._last_seen_selector = opt_candidate
+                            st.session_state["_pending_stock_selector"] = opt_candidate
                         st.rerun()
             elif hasattr(event, "selection") and not event.selection.rows:
                 st.session_state._last_table_clicked_ticker = None
@@ -1670,6 +1762,12 @@ def main():
         if not all_results:
             st.warning("분석 가능한 종목 데이터가 없습니다.")
         else:
+            if "_pending_stock_selector" in st.session_state:
+                pending_opt = st.session_state.pop("_pending_stock_selector")
+                if pending_opt in all_options:
+                    st.session_state["dashboard_stock_selector"] = pending_opt
+                    st.session_state._last_seen_selector = pending_opt
+
             sel_box_val = st.selectbox(
                 "분석 대상 종목 선택",
                 all_options,
@@ -1713,73 +1811,87 @@ def main():
                 show_lbl = st.checkbox("종목명 상시 표시", value=False, key="bubble_show_label")
                 min_eps_filter = st.number_input("최소 Fwd EPS 필터", value=0, step=500, key="bubble_min_eps")
 
-            bubble_data = [r for r in filtered_results if r.current_fwd_eps >= min_eps_filter]
+            bubble_data = [
+                r for r in filtered_results
+                if (r.current_fwd_eps is not None and not np.isnan(r.current_fwd_eps) and r.current_fwd_eps >= min_eps_filter)
+            ]
+            if not bubble_data:
+                with b_c1:
+                    st.info("💡 선택된 최소 Fwd EPS 필터 조건에 부합하는 종목이 없습니다. 필터 기준값을 낮춰보세요.")
+            else:
+                SIG_COLOR_MAP = {
+                    "✨골든크로스": "#fbbf24",
+                    "🚀어닝모멘텀": "#38bdf8",
+                    "💎가치주": "#c084fc",
+                    "⚠️밸류트랩": "#f87171",
+                    "Neutral": "#9ca3af",
+                    "🔻고P/E하향": "#f43f5e",
+                }
 
-            SIG_COLOR_MAP = {
-                "✨골든크로스": "#fbbf24",
-                "🚀어닝모멘텀": "#38bdf8",
-                "💎가치주": "#c084fc",
-                "⚠️밸류트랩": "#f87171",
-                "Neutral": "#9ca3af",
-                "🔻고P/E하향": "#f43f5e",
-            }
+                fig_bubble = go.Figure()
+                for sig_key, sig_color in SIG_COLOR_MAP.items():
+                    grp = [r for r in bubble_data if get_strategy_signal(r) == sig_key]
+                    if not grp:
+                        continue
+                    fig_bubble.add_trace(go.Scatter(
+                        x=[(float(r.pe_percentile) if (r.pe_percentile is not None and not np.isnan(r.pe_percentile)) else 50.0) for r in grp],
+                        y=[(float(r.upside_base) if (r.upside_base is not None and not np.isnan(r.upside_base)) else 0.0) for r in grp],
+                        mode="markers+text" if show_lbl else "markers",
+                        name=sig_key,
+                        text=[r.name for r in grp],
+                        textposition="top center",
+                        textfont=dict(size=9, color=sig_color),
+                        marker=dict(
+                            size=[
+                                max(8, min(28, float(r.current_fwd_eps) / 800.0))
+                                if (r.current_fwd_eps is not None and not np.isnan(r.current_fwd_eps) and r.current_fwd_eps > 0)
+                                else 8
+                                for r in grp
+                            ],
+                            color=sig_color,
+                            opacity=0.75,
+                            line=dict(width=1, color="rgba(255,255,255,0.2)"),
+                        ),
+                        customdata=[[
+                            r.name, r.ticker, r.sector,
+                            f"{r.current_price:,.0f}" if (r.current_price is not None and not np.isnan(r.current_price)) else "N/A",
+                            f"{r.current_fwd_pe:.1f}" if (r.current_fwd_pe is not None and not np.isnan(r.current_fwd_pe)) else "N/A",
+                            f"{r.current_fwd_eps:,.0f}" if (r.current_fwd_eps is not None and not np.isnan(r.current_fwd_eps)) else "N/A",
+                            f"{r.target_base:,.0f}" if (r.target_base is not None and not np.isnan(r.target_base)) else "N/A",
+                            f"{r.upside_base:+.1f}%" if (r.upside_base is not None and not np.isnan(r.upside_base)) else "N/A",
+                            f"{r.eps_rev_1m:+.1f}%" if (r.eps_rev_1m is not None and not np.isnan(r.eps_rev_1m)) else "N/A"
+                        ] for r in grp],
+                        hovertemplate=(
+                            "<b>%{customdata[0]}</b> (%{customdata[1]}) · %{customdata[2]}<br>"
+                            "현재가: ₩%{customdata[3]}<br>"
+                            "Fwd P/E: %{customdata[4]}x (위치: %{x:.0f}%)<br>"
+                            "Fwd EPS: ₩%{customdata[5]} (1M 리비전: %{customdata[8]})<br>"
+                            "─────────────<br>"
+                            "Base 목표가: ₩%{customdata[6]}<br>"
+                            "<b>Base 업사이드: %{customdata[7]}</b><extra></extra>"
+                        ),
+                    ))
 
-            fig_bubble = go.Figure()
-            for sig_key, sig_color in SIG_COLOR_MAP.items():
-                grp = [r for r in bubble_data if get_strategy_signal(r) == sig_key]
-                if not grp:
-                    continue
-                fig_bubble.add_trace(go.Scatter(
-                    x=[r.pe_percentile for r in grp],
-                    y=[r.upside_base for r in grp],
-                    mode="markers+text" if show_lbl else "markers",
-                    name=sig_key,
-                    text=[r.name for r in grp],
-                    textposition="top center",
-                    textfont=dict(size=9, color=sig_color),
-                    marker=dict(
-                        size=[max(8, min(28, r.current_fwd_eps / 800)) for r in grp],
-                        color=sig_color,
-                        opacity=0.75,
-                        line=dict(width=1, color="rgba(255,255,255,0.2)"),
+                fig_bubble.add_vline(x=50, line_color="rgba(255,255,255,0.15)", line_dash="dash",
+                                     annotation_text="P/E 중앙값", annotation_font_color="#6b7280")
+                fig_bubble.add_hline(y=0, line_color="rgba(255,255,255,0.15)", line_dash="dash",
+                                     annotation_text="현재가 = Base 목표가", annotation_font_color="#6b7280")
+
+                fig_bubble.update_layout(
+                    **CHART_LAYOUT,
+                    height=540,
+                    margin=dict(l=10, r=20, t=40, b=10),
+                    title=dict(
+                        text="P/E 역사적 위치 vs Base 업사이드 (버블 크기 = 12M Fwd EPS)",
+                        x=0, font=dict(size=13, color="#c4c4e0")
                     ),
-                    customdata=[[
-                        r.name, r.ticker, r.sector,
-                        f"{r.current_price:,.0f}", f"{r.current_fwd_pe:.1f}",
-                        f"{r.current_fwd_eps:,.0f}", f"{r.target_base:,.0f}",
-                        f"{r.upside_base:+.1f}%", f"{r.eps_rev_1m:+.1f}%" if r.eps_rev_1m is not None else "N/A"
-                    ] for r in grp],
-                    hovertemplate=(
-                        "<b>%{customdata[0]}</b> (%{customdata[1]}) · %{customdata[2]}<br>"
-                        "현재가: ₩%{customdata[3]}<br>"
-                        "Fwd P/E: %{customdata[4]}x (위치: %{x:.0f}%)<br>"
-                        "Fwd EPS: ₩%{customdata[5]} (1M 리비전: %{customdata[8]})<br>"
-                        "─────────────<br>"
-                        "Base 목표가: ₩%{customdata[6]}<br>"
-                        "<b>Base 업사이드: %{customdata[7]}</b><extra></extra>"
-                    ),
-                ))
+                    xaxis=dict(**AX, title="P/E 역사적 위치 (%)", range=[-2, 102]),
+                    yaxis=dict(**AX, title="Base 업사이드 (%)"),
+                    legend=dict(orientation="h", y=1.06, x=0, font=dict(size=10)),
+                )
 
-            fig_bubble.add_vline(x=50, line_color="rgba(255,255,255,0.15)", line_dash="dash",
-                                 annotation_text="P/E 중앙값", annotation_font_color="#6b7280")
-            fig_bubble.add_hline(y=0, line_color="rgba(255,255,255,0.15)", line_dash="dash",
-                                 annotation_text="현재가 = Base 목표가", annotation_font_color="#6b7280")
-
-            fig_bubble.update_layout(
-                **CHART_LAYOUT,
-                height=540,
-                margin=dict(l=10, r=20, t=40, b=10),
-                title=dict(
-                    text="P/E 역사적 위치 vs Base 업사이드 (버블 크기 = 12M Fwd EPS)",
-                    x=0, font=dict(size=13, color="#c4c4e0")
-                ),
-                xaxis=dict(**AX, title="P/E 역사적 위치 (%)", range=[-2, 102]),
-                yaxis=dict(**AX, title="Base 업사이드 (%)"),
-                legend=dict(orientation="h", y=1.06, x=0, font=dict(size=10)),
-            )
-
-            with b_c1:
-                st.plotly_chart(fig_bubble, use_container_width=True)
+                with b_c1:
+                    st.plotly_chart(fig_bubble, key="tab3_bubble_chart", **_width_kwargs(st.plotly_chart))
 
 
 if __name__ == "__main__":

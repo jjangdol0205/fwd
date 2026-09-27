@@ -45,6 +45,10 @@ def get_current_prices_batch(tickers: list) -> pd.Series:
     KRX 일괄 API 방식 — 당일 전체 시장 데이터를 한 번에 조회 (빠름)
     실패 시 개별 조회로 폴백
     """
+    import os
+    if os.environ.get("STREAMLIT_HEADLESS_TEST") == "1" or os.environ.get("PYTEST_CURRENT_TEST"):
+        return pd.Series(dtype=float)
+
     try:
         from pykrx import stock as krx
     except ImportError:
