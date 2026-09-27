@@ -1494,6 +1494,7 @@ def main():
                         st.session_state.sel_ticker = m.ticker
                         st.session_state._last_seen_sel_ticker = m.ticker
                         st.session_state._synced_ticker = m.ticker
+                        st.session_state["_pending_nav_tab"] = TAB_DASHBOARD
                         st.session_state["main_nav_tab_radio"] = TAB_DASHBOARD
                         opt_candidate = ticker_to_opt.get(m.ticker)
                         if opt_candidate:
@@ -1534,7 +1535,9 @@ def main():
     # ──────────────────────────────────────────
     # 6. 메인 탭 네비게이션
     # ──────────────────────────────────────────
-    if "main_nav_tab_radio" not in st.session_state or st.session_state.main_nav_tab_radio not in NAV_TABS:
+    if "_pending_nav_tab" in st.session_state:
+        st.session_state["main_nav_tab_radio"] = st.session_state.pop("_pending_nav_tab")
+    elif "main_nav_tab_radio" not in st.session_state or st.session_state.main_nav_tab_radio not in NAV_TABS:
         st.session_state.main_nav_tab_radio = TAB_SCREENER
 
     nav_tab = st.radio(
@@ -1645,7 +1648,7 @@ def main():
                         st.session_state.sel_ticker = clicked_ticker
                         st.session_state._last_seen_sel_ticker = clicked_ticker
                         st.session_state._synced_ticker = clicked_ticker
-                        st.session_state["main_nav_tab_radio"] = TAB_DASHBOARD
+                        st.session_state["_pending_nav_tab"] = TAB_DASHBOARD
                         opt_candidate = ticker_to_opt.get(clicked_ticker)
                         if opt_candidate:
                             st.session_state["dashboard_stock_selector"] = opt_candidate

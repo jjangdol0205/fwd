@@ -1,0 +1,24 @@
+name: Keep Streamlit App Awake
+
+on:
+  schedule:
+    # Run every 12 hours (at 00:00 and 12:00 UTC) to prevent Streamlit Cloud hibernation
+    - cron: '0 0,12 * * *'
+  workflow_dispatch: # Allows manual trigger anytime from GitHub Actions tab
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Streamlit Cloud App
+        env:
+          APP_URL: ${{ vars.STREAMLIT_APP_URL || secrets.STREAMLIT_APP_URL || 'https://jjangdol0205-fwd.streamlit.app' }}
+        run: |
+          echo "Pinging Streamlit App at: $APP_URL"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -L --max-time 30 "$APP_URL" || true)
+          echo "Response HTTP Status: $STATUS"
+          if [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 400 ]; then
+            echo "Streamlit app is active and responsive!"
+          else
+            echo "Ping sent (HTTP $STATUS). Activity registered on Streamlit Cloud."
+          fi
