@@ -765,6 +765,18 @@ def apply_quick_preset(df: pd.DataFrame, preset_key: str) -> pd.DataFrame:
     if key == "ALL" or not key:
         return df.copy()
 
+    if key in ("WATCHLIST", "CORE", "FAVORITE", "TOP_PICK"):
+        target_tickers = {"005930", "000660", "402340"}
+        col_t = "코드" if "코드" in df.columns else ("ticker" if "ticker" in df.columns else None)
+        if col_t is not None:
+            mask = df[col_t].astype(str).str.replace("A", "").str.zfill(6).isin(target_tickers)
+            sub = df[mask].copy()
+            order_map = {"005930": 0, "000660": 1, "402340": 2}
+            sub["_w_order"] = sub[col_t].astype(str).str.replace("A", "").str.zfill(6).map(order_map).fillna(99)
+            sub = sub.sort_values(by="_w_order").drop(columns=["_w_order"])
+            return sub
+        return df.copy()
+
     if key == "TURNAROUND":
         s_pe_pct = df["pe_percentile"] if "pe_percentile" in df.columns else pd.Series(100.0, index=df.index)
         s_sec_pct = df["sector_pe_percentile"] if "sector_pe_percentile" in df.columns else pd.Series(100.0, index=df.index)
