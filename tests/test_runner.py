@@ -54,6 +54,10 @@ from tests.test_adversarial_r1_r2 import (
     TestAppAstAndCompilation,
     TestR3HeadlessStreamlitExecution,
 )
+from tests.test_watchlist_tracking import (
+    TestWatchlistTracking,
+    TestWatchlistAppTest,
+)
 
 
 def build_suite() -> unittest.TestSuite:
@@ -109,6 +113,10 @@ def build_suite() -> unittest.TestSuite:
     suite.addTests(loader.loadTestsFromTestCase(TestR2NavigationReactivityAdversarial))
     suite.addTests(loader.loadTestsFromTestCase(TestAppAstAndCompilation))
     suite.addTests(loader.loadTestsFromTestCase(TestR3HeadlessStreamlitExecution))
+
+    # Watchlist Fwd EPS Tracking & Dynamic Management Suite
+    suite.addTests(loader.loadTestsFromTestCase(TestWatchlistTracking))
+    suite.addTests(loader.loadTestsFromTestCase(TestWatchlistAppTest))
 
     return suite
 

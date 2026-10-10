@@ -125,6 +125,46 @@ def strategy_badge_html(sig: str) -> str:
 
 # apply_quick_preset is imported from core.calculator
 
+WATCHLIST_FILE = ROOT / "data" / "user_watchlist.json"
+DEFAULT_WATCHLIST = ["005930", "000660", "402340", "196170", "267260"]
+
+
+def get_user_watchlist() -> List[str]:
+    """사용자 관심종목 리스트 조회 (세션 상태 및 user_watchlist.json 디스크 영속성 지원)"""
+    if "custom_watchlist" in st.session_state and st.session_state.custom_watchlist:
+        return list(st.session_state.custom_watchlist)
+    if WATCHLIST_FILE.exists():
+        try:
+            with open(WATCHLIST_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list) and data:
+                    cleaned = [_clean_ticker(t) for t in data if _clean_ticker(t)]
+                    if cleaned:
+                        st.session_state.custom_watchlist = cleaned
+                        return cleaned
+        except Exception:
+            pass
+    st.session_state.custom_watchlist = list(DEFAULT_WATCHLIST)
+    return list(DEFAULT_WATCHLIST)
+
+
+def save_user_watchlist(tickers: List[str]):
+    """사용자 관심종목 리스트 저장 (세션 상태 갱신 및 디스크 영속화)"""
+    cleaned = [_clean_ticker(t) for t in tickers if _clean_ticker(t)]
+    seen = set()
+    uniq = []
+    for t in cleaned:
+        if t not in seen:
+            seen.add(t)
+            uniq.append(t)
+    st.session_state.custom_watchlist = uniq
+    try:
+        WATCHLIST_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(WATCHLIST_FILE, "w", encoding="utf-8") as f:
+            json.dump(uniq, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
 
 CHART_LAYOUT = dict(
     paper_bgcolor="rgba(0,0,0,0)",
@@ -755,9 +795,12 @@ def render_stock_detail_view(
     strat_sig = get_strategy_signal(target_r)
     t_curr_p_str = f"₩{target_r.current_price:,.0f}" if (target_r.current_price is not None and not np.isnan(target_r.current_price)) else "N/A"
 
+    cur_wl = get_user_watchlist()
+    is_in_wl = target_r.ticker in cur_wl
+
     st.markdown(f"""
     <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);
-                border-radius:14px;padding:16px 20px;margin-bottom:14px;">
+                border-radius:14px;padding:16px 20px;margin-bottom:10px;">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
         <div>
           <span style="font-size:0.85rem;color:#818cf8;font-weight:600;">{target_r.ticker}</span>
@@ -778,6 +821,18 @@ def render_stock_detail_view(
       </div>
     </div>
     """, unsafe_allow_html=True)
+
+    # 관심종목 추가/해제 툴바
+    tb_c1, tb_c2 = st.columns([5, 1.8])
+    with tb_c2:
+        wl_label = "⭐ 관심종목 등록됨 (클릭 해제)" if is_in_wl else "☆ 관심종목 추가"
+        if st.button(wl_label, key=f"{key_prefix}_btn_wl_toggle_{target_r.ticker}", use_container_width=True, type="primary" if is_in_wl else "secondary"):
+            if is_in_wl:
+                new_wl = [t for t in cur_wl if t != target_r.ticker]
+            else:
+                new_wl = cur_wl + [target_r.ticker]
+            save_user_watchlist(new_wl)
+            st.rerun()
 
     # 인터랙티브 밴드 모델 스위처
     ctrl_c1, ctrl_c2, ctrl_c3 = st.columns([3, 2, 2])
@@ -1211,117 +1266,208 @@ def render_watchlist_spotlight_deck(
     names: Dict[str, str],
     markets: Dict[str, str],
     ticker_to_opt: Dict[str, str],
+    all_ticker_map: Optional[Dict[str, str]] = None,
+    all_options: Optional[List[str]] = None,
 ):
-    """핵심 관심종목 (삼성전자, SK하이닉스, SK스퀘어) 스포트라이트 카드 데크 & EPS 추이 심층 비교 분석 패널"""
-    WATCHLIST_TICKERS = ["005930", "000660", "402340"]
-    watchlist_results = [r for r in all_results if r.ticker in WATCHLIST_TICKERS]
+    """
+    주요 관심종목 (삼성전자, SK하이닉스, SK스퀘어, 알테오젠, HD현대일렉트릭 등)
+    동적 관심종목 관리, 스포트라이트 카드 데크 & 12M Forward EPS 추이 심층 비교 분석 패널
+    """
+    cur_wl = get_user_watchlist()
+    watchlist_results = [r for r in all_results if r.ticker in cur_wl]
     if not watchlist_results:
-        return
+        watchlist_results = [r for r in all_results if r.ticker in DEFAULT_WATCHLIST]
+        cur_wl = list(DEFAULT_WATCHLIST)
 
-    order_map = {"005930": 0, "000660": 1, "402340": 2}
-    watchlist_results.sort(key=lambda r: order_map.get(r.ticker, 99))
+    # Sort watchlist_results according to cur_wl order
+    order_map = {t: idx for idx, t in enumerate(cur_wl)}
+    watchlist_results.sort(key=lambda r: order_map.get(r.ticker, 999))
 
     st.markdown(
-        '<div style="margin-top:16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">'
-        '<div style="font-size:1.15rem;font-weight:800;color:#f1f5f9;display:flex;align-items:center;gap:8px;">'
-        '⭐ <span style="background:linear-gradient(90deg,#60a5fa,#a78bfa,#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">'
-        '핵심 관심종목 퀵 포커스 (삼성전자 · SK하이닉스 · SK스퀘어)</span>'
-        '</div>'
-        '<div style="font-size:0.75rem;color:#94a3b8;">반도체 & AI 밸류체인 핵심 분석군</div>'
-        '</div>',
+        f'<div style="margin-top:16px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">'
+        f'<div style="font-size:1.15rem;font-weight:800;color:#f1f5f9;display:flex;align-items:center;gap:8px;">'
+        f'⭐ <span style="background:linear-gradient(90deg,#60a5fa,#a78bfa,#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">'
+        f'주요 관심종목 Fwd EPS 트래킹 허브 ({len(watchlist_results)}개사)</span>'
+        f'</div>'
+        f'<div style="font-size:0.78rem;color:#94a3b8;">12M Forward EPS 실적 성장 궤적 & Revision 모멘텀 집중 모니터링</div>'
+        f'</div>',
         unsafe_allow_html=True,
     )
 
-    # 3-Column Spotlight Cards
-    w_cols = st.columns(3)
-    card_colors = {"005930": "#38bdf8", "000660": "#34d399", "402340": "#fbbf24"}
+    # 관심종목 관리 바 (종목 추가 / 삭제 / 초기화)
+    if all_options and all_ticker_map:
+        with st.expander("⚙️ 관심종목 편집 및 관리 (종목 추가 / 삭제 / 초기화)", expanded=False):
+            wm_c1, wm_c2 = st.columns([4, 1.2])
+            with wm_c1:
+                cur_opts = [ticker_to_opt[t] for t in cur_wl if t in ticker_to_opt]
+                new_opts = st.multiselect(
+                    "관심종목 선택 (350개 유니버스에서 검색 및 추가/제거)",
+                    options=all_options,
+                    default=cur_opts,
+                    key="watchlist_multiselect_box",
+                    help="원하는 종목명을 입력하여 검색 후 추가하거나 x를 눌러 삭제할 수 있습니다.",
+                )
+            with wm_c2:
+                st.write("")
+                st.write("")
+                b_c1, b_c2 = st.columns(2)
+                with b_c1:
+                    if st.button("💾 적용", key="btn_apply_wl_mgr", type="primary", use_container_width=True):
+                        new_tickers = [all_ticker_map[o] for o in new_opts if o in all_ticker_map]
+                        if new_tickers:
+                            save_user_watchlist(new_tickers)
+                            st.rerun()
+                with b_c2:
+                    if st.button("🔄 리셋", key="btn_reset_wl_mgr", help="기본 5종목(삼성전자, SK하이닉스, SK스퀘어, 알테오젠, HD현대일렉트릭)으로 초기화", use_container_width=True):
+                        save_user_watchlist(DEFAULT_WATCHLIST)
+                        st.rerun()
 
-    for idx, r in enumerate(watchlist_results):
-        t_col = card_colors.get(r.ticker, "#818cf8")
-        is_sel = (st.session_state.sel_ticker == r.ticker)
-        bcol = t_col if is_sel else "rgba(255,255,255,0.08)"
-        up_c = "#34d399" if r.upside_base >= 0 else "#f87171"
-        r1w_c = "#34d399" if (r.eps_rev_1w or 0) > 0 else ("#f87171" if (r.eps_rev_1w or 0) < 0 else "#9ca3af")
-        r1m_c = "#34d399" if (r.eps_rev_1m or 0) > 0 else ("#f87171" if (r.eps_rev_1m or 0) < 0 else "#9ca3af")
-        r3m_c = "#34d399" if (r.eps_rev_3m or 0) > 0 else ("#f87171" if (r.eps_rev_3m or 0) < 0 else "#9ca3af")
+    # Dynamic Responsive Spotlight Cards
+    card_colors = {
+        "005930": "#38bdf8",  # 삼성전자 - 하늘색
+        "000660": "#34d399",  # SK하이닉스 - 에메랄드 그린
+        "402340": "#fbbf24",  # SK스퀘어 - 앰버/골드
+        "196170": "#ec4899",  # 알테오젠 - 핑크/로즈
+        "267260": "#a78bfa",  # HD현대일렉트릭 - 퍼플/바이올렛
+    }
+    PALETTE = ["#38bdf8", "#34d399", "#fbbf24", "#ec4899", "#a78bfa", "#f97316", "#2dd4bf", "#e879f9", "#3b82f6", "#10b981"]
 
-        with w_cols[idx]:
-            st.markdown(f"""
-            <div style="background:rgba(255,255,255,0.03);border:1.5px solid {bcol};
-                        border-radius:14px;padding:16px 18px;margin-bottom:8px;position:relative;">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-                <span style="font-size:0.72rem;color:#818cf8;font-weight:700;">⭐ KEY WATCHLIST</span>
-                <span style="font-size:0.72rem;color:#9ca3af;">{r.ticker} · {r.sector}</span>
-              </div>
-              <div style="font-size:1.35rem;font-weight:800;color:#f1f5f9;margin-bottom:4px;">{r.name}</div>
-              <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px;">
-                <span style="font-size:1.4rem;font-weight:800;color:#f8fafc;">₩{r.current_price:,.0f}</span>
-                <span>{strategy_badge_html(get_strategy_signal(r))}</span>
-              </div>
-              <div style="background:rgba(0,0,0,0.25);border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:0.78rem;">
-                <div style="display:flex;justify-content:space-between;color:#cbd5e1;margin-bottom:3px;">
-                  <span>12M Fwd EPS:</span>
-                  <b style="color:#60a5fa;">₩{r.current_fwd_eps:,.0f}</b>
-                </div>
-                <div style="display:flex;justify-content:space-between;color:#cbd5e1;margin-bottom:3px;">
-                  <span>EPS 리비전:</span>
-                  <span>
-                    1W <b style="color:{r1w_c}">{r.eps_rev_1w:+.1f}%</b> ·
-                    1M <b style="color:{r1m_c}">{r.eps_rev_1m:+.1f}%</b> ·
-                    3M <b style="color:{r3m_c}">{r.eps_rev_3m:+.1f}%</b>
-                  </span>
-                </div>
-                <div style="display:flex;justify-content:space-between;color:#cbd5e1;">
-                  <span>Fwd P/E:</span>
-                  <span><b>{r.current_fwd_pe:.1f}x</b> (위치 <b style="color:#38bdf8">{r.pe_percentile:.0f}%</b>)</span>
-                </div>
-              </div>
-              <div style="display:flex;justify-content:space-between;align-items:center;font-size:0.8rem;margin-bottom:8px;">
-                <span style="color:#94a3b8;">Base 목표가: ₩{r.target_base:,.0f}</span>
-                <span style="font-weight:700;color:{up_c};">Base {r.upside_base:+.1f}%</span>
-              </div>
-            </div>
-            """, unsafe_allow_html=True)
+    chunk_size = 5 if len(watchlist_results) <= 5 else 4
+    for i in range(0, len(watchlist_results), chunk_size):
+        chunk = watchlist_results[i : i + chunk_size]
+        cols = st.columns(len(chunk))
+        for idx_c, r in enumerate(chunk):
+            t_col = card_colors.get(r.ticker, PALETTE[(i + idx_c) % len(PALETTE)])
+            is_sel = (st.session_state.sel_ticker == r.ticker)
+            bcol = t_col if is_sel else "rgba(255,255,255,0.08)"
+            up_c = "#34d399" if r.upside_base >= 0 else "#f87171"
+            r1w_c = "#34d399" if (r.eps_rev_1w or 0) > 0 else ("#f87171" if (r.eps_rev_1w or 0) < 0 else "#9ca3af")
+            r1m_c = "#34d399" if (r.eps_rev_1m or 0) > 0 else ("#f87171" if (r.eps_rev_1m or 0) < 0 else "#9ca3af")
+            r3m_c = "#34d399" if (r.eps_rev_3m or 0) > 0 else ("#f87171" if (r.eps_rev_3m or 0) < 0 else "#9ca3af")
 
-            if st.button(
-                f"⚡ {r.name} 원페이지 분석",
-                key=f"btn_spotlight_{r.ticker}",
-                use_container_width=True,
-                type="primary" if is_sel else "secondary",
-            ):
-                st.session_state.sel_ticker = r.ticker
-                st.session_state._last_seen_sel_ticker = r.ticker
-                st.session_state._synced_ticker = r.ticker
-                st.session_state["_pending_nav_tab"] = "🔍  원페이지 통합 대시보드"
-                opt_cand = ticker_to_opt.get(r.ticker)
-                if opt_cand:
-                    st.session_state["_pending_stock_selector"] = opt_cand
-                st.rerun()
+            with cols[idx_c]:
+                st.markdown(f"""
+                <div style="background:rgba(255,255,255,0.03);border:1.5px solid {bcol};
+                            border-radius:14px;padding:14px 16px;margin-bottom:8px;position:relative;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                    <span style="font-size:0.72rem;color:{t_col};font-weight:700;">⭐ KEY WATCHLIST</span>
+                    <span style="font-size:0.70rem;color:#9ca3af;">{r.ticker} · {r.sector}</span>
+                  </div>
+                  <div style="font-size:1.25rem;font-weight:800;color:#f1f5f9;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{r.name}</div>
+                  <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px;">
+                    <span style="font-size:1.3rem;font-weight:800;color:#f8fafc;">₩{r.current_price:,.0f}</span>
+                    <span>{strategy_badge_html(get_strategy_signal(r))}</span>
+                  </div>
+                  <div style="background:rgba(0,0,0,0.25);border-radius:8px;padding:7px 9px;margin-bottom:8px;font-size:0.76rem;">
+                    <div style="display:flex;justify-content:space-between;color:#cbd5e1;margin-bottom:2px;">
+                      <span>12M Fwd EPS:</span>
+                      <b style="color:#60a5fa;">₩{r.current_fwd_eps:,.0f}</b>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;color:#cbd5e1;margin-bottom:2px;">
+                      <span>EPS 리비전:</span>
+                      <span>
+                        1W <b style="color:{r1w_c}">{r.eps_rev_1w:+.1f}%</b> ·
+                        1M <b style="color:{r1m_c}">{r.eps_rev_1m:+.1f}%</b> ·
+                        3M <b style="color:{r3m_c}">{r.eps_rev_3m:+.1f}%</b>
+                      </span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;color:#cbd5e1;">
+                      <span>Fwd P/E:</span>
+                      <span><b>{r.current_fwd_pe:.1f}x</b> (위치 <b style="color:#38bdf8">{r.pe_percentile:.0f}%</b>)</span>
+                    </div>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;font-size:0.78rem;margin-bottom:8px;">
+                    <span style="color:#94a3b8;">Base 목표: ₩{r.target_base:,.0f}</span>
+                    <span style="font-weight:700;color:{up_c};">Base {r.upside_base:+.1f}%</span>
+                  </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                act_c1, act_c2 = st.columns([4.2, 1.2])
+                with act_c1:
+                    if st.button(
+                        f"⚡ {r.name} 원페이지 분석",
+                        key=f"btn_spotlight_{r.ticker}",
+                        use_container_width=True,
+                        type="primary" if is_sel else "secondary",
+                    ):
+                        st.session_state.sel_ticker = r.ticker
+                        st.session_state._last_seen_sel_ticker = r.ticker
+                        st.session_state._synced_ticker = r.ticker
+                        st.session_state["_pending_nav_tab"] = "🔍  원페이지 통합 대시보드"
+                        opt_cand = ticker_to_opt.get(r.ticker)
+                        if opt_cand:
+                            st.session_state["_pending_stock_selector"] = opt_cand
+                        st.rerun()
+                with act_c2:
+                    if st.button("✕", key=f"btn_spotlight_rm_{r.ticker}", help=f"{r.name} 관심종목에서 해제", use_container_width=True):
+                        new_wl = [t for t in cur_wl if t != r.ticker]
+                        if new_wl:
+                            save_user_watchlist(new_wl)
+                            st.rerun()
 
     # Detailed EPS Comparative Analysis Expander
-    with st.expander("📈 [핵심 관심종목] 삼성전자 · SK하이닉스 · SK스퀘어 EPS 추이 및 모멘텀 심층 분석", expanded=True):
-        st.markdown("""
-        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:10px;margin-bottom:14px;">
-          <div style="background:rgba(56,189,248,0.06);border-left:3px solid #38bdf8;padding:10px 14px;border-radius:6px;font-size:0.8rem;color:#cbd5e1;">
-            <b style="color:#38bdf8;">삼성전자 (005930)</b><br>
-            • Fwd EPS ₩63,803, 3M 리비전 +10.4%로 실적 바닥 확인 후 반등세 안착.<br>
-            • Fwd P/E 4.1x (역사적 0% 최저 바닥)로 하방 리스크가 극히 제한적이며, Base 목표가 ₩742,605 기준 +183.4%의 강력한 리레이팅 잠재력 보유.
-          </div>
-          <div style="background:rgba(52,211,153,0.06);border-left:3px solid #34d399;padding:10px 14px;border-radius:6px;font-size:0.8rem;color:#cbd5e1;">
-            <b style="color:#34d399;">SK하이닉스 (000660)</b><br>
-            • HBM3E/HBM4 글로벌 독점적 지위에 힘입어 12M Fwd EPS ₩435,430 사상 최고치 경신.<br>
-            • 1W +2.4%, 1M +3.2%, 3M +10.3%로 어닝 모멘텀 가속화. Fwd P/E 3.9x로 호실적 대비 밸류에이션 부담이 없는 주도주 국면.
-          </div>
-          <div style="background:rgba(251,191,36,0.06);border-left:3px solid #fbbf24;padding:10px 14px;border-radius:6px;font-size:0.8rem;color:#cbd5e1;">
-            <b style="color:#fbbf24;">SK스퀘어 (402340)</b><br>
-            • SK하이닉스 실적 폭증에 따른 지분법 이익 급증으로 3M EPS 리비전 무려 +24.9% (34.1만→42.6만원) 폭등.<br>
-            • Fwd P/E 2.5x로 지주사 순자산가치(NAV) 대비 할인율이 극대화된 상태로 실적 모멘텀과 밸류에이션 매력을 동시 겸비.
-          </div>
-        </div>
-        """, unsafe_allow_html=True)
+    CURATED_COMMENTS = {
+        "005930": (
+            "삼성전자 (005930)",
+            "#38bdf8",
+            "• Fwd EPS ₩63,803, 3M 리비전 +10.4%로 실적 바닥 확인 후 반등세 안착.<br>"
+            "• Fwd P/E 4.1x (역사적 0% 최저 바닥)로 하방 리스크가 극히 제한적이며, Base 목표가 ₩742,605 기준 +183.4%의 강력한 리레이팅 잠재력 보유."
+        ),
+        "000660": (
+            "SK하이닉스 (000660)",
+            "#34d399",
+            "• HBM3E/HBM4 글로벌 독점적 지위에 힘입어 12M Fwd EPS ₩435,430 사상 최고치 경신.<br>"
+            "• 1W +2.4%, 1M +3.2%, 3M +10.3%로 어닝 모멘텀 가속화. Fwd P/E 3.9x로 호실적 대비 밸류에이션 부담이 없는 주도주 국면."
+        ),
+        "402340": (
+            "SK스퀘어 (402340)",
+            "#fbbf24",
+            "• SK하이닉스 실적 폭증에 따른 지분법 이익 급증으로 3M EPS 리비전 무려 +24.9% (34.1만→42.6만원) 폭등.<br>"
+            "• Fwd P/E 2.5x로 지주사 순자산가치(NAV) 대비 할인율이 극대화된 상태로 실적 모멘텀과 밸류에이션 매력을 동시 겸비."
+        ),
+        "196170": (
+            "알테오젠 (196170)",
+            "#ec4899",
+            "• ALT-B4 피하주사(SC) 제형 플랫폼의 글로벌 빅파마(머크 등) 기술수출 및 마일스톤 본격 유입.<br>"
+            "• 1M/3M EPS 추정치는 단기 조정(-4.2%) 후 최근 1W +1.5% 반등 시작. Fwd P/E 47x이나 과거(100x+) 대비 10% 백분위로 하향 안정화."
+        ),
+        "267260": (
+            "HD현대일렉트릭 (267260)",
+            "#a78bfa",
+            "• 북미 AI 데이터센터 전력 수요 급증 및 변압기 슈퍼사이클 지속으로 Fwd EPS ₩31,703의 견고한 우상향 유지.<br>"
+            "• 1W +0.9%, 1M +0.6%, 3M +3.6%로 연속 상향 조정. Fwd P/E 19.1x로 수주잔고 증가와 고수익성 납기 지속 여부가 핵심."
+        ),
+    }
 
+    with st.expander(f"📈 [주요 관심종목] 12M Forward EPS 추이 및 모멘텀 심층 분석 ({len(watchlist_results)}개사)", expanded=True):
+        cmt_cards_html = []
+        for r in watchlist_results:
+            if r.ticker in CURATED_COMMENTS:
+                c_title, c_color, c_text = CURATED_COMMENTS[r.ticker]
+            else:
+                c_title = f"{r.name} ({r.ticker})"
+                c_color = card_colors.get(r.ticker, "#818cf8")
+                c_text = (
+                    f"• 12M Fwd EPS ₩{r.current_fwd_eps:,.0f}, 최근 1M 리비전 {r.eps_rev_1m:+.1f}%, 3M 리비전 {r.eps_rev_3m:+.1f}%.<br>"
+                    f"• Fwd P/E {r.current_fwd_pe:.1f}x (백분위 {r.pe_percentile:.0f}%), Base 목표가 ₩{r.target_base:,.0f} (상승여력 {r.upside_base:+.1f}%). {get_strategy_signal(r)} 국면."
+                )
+            cmt_cards_html.append(
+                f'<div style="background:rgba(255,255,255,0.03);border-left:3px solid {c_color};'
+                f'padding:10px 14px;border-radius:6px;font-size:0.8rem;color:#cbd5e1;">'
+                f'<b style="color:{c_color};">{c_title}</b><br>{c_text}</div>'
+            )
+
+        st.markdown(
+            f'<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:10px;margin-bottom:14px;">'
+            f'{"".join(cmt_cards_html)}</div>',
+            unsafe_allow_html=True,
+        )
+
+        wl_tickers = [r.ticker for r in watchlist_results]
         cutoff_date = eps_df.index.max() - pd.DateOffset(years=3)
-        sub_e = eps_df[WATCHLIST_TICKERS].loc[eps_df.index >= cutoff_date].dropna(how="all")
+        valid_cols = [t for t in wl_tickers if t in eps_df.columns]
+        sub_e = eps_df[valid_cols].loc[eps_df.index >= cutoff_date].dropna(how="all")
 
         fig_comp = make_subplots(
             rows=2, cols=1,
@@ -1334,24 +1480,25 @@ def render_watchlist_spotlight_deck(
             )
         )
 
-        for t in WATCHLIST_TICKERS:
+        for idx_t, t in enumerate(wl_tickers):
             if t in sub_e.columns:
                 s = sub_e[t].dropna()
                 if not s.empty and s.iloc[0] > 0:
                     rebased = (s / s.iloc[0]) * 100.0
+                    l_color = card_colors.get(t, PALETTE[idx_t % len(PALETTE)])
                     fig_comp.add_trace(
                         go.Scatter(
                             x=rebased.index, y=rebased.values,
                             mode="lines",
                             name=f"{names.get(t, t)} (지수화)",
-                            line=dict(color=card_colors.get(t, "#ffffff"), width=2.5),
-                            hovertemplate=f"<b>{names.get(t)}</b>: %{{y:.1f}} (시작=100)<br>일자: %{{x|%Y-%m-%d}}<extra></extra>"
+                            line=dict(color=l_color, width=2.5),
+                            hovertemplate=f"<b>{names.get(t, t)}</b>: %{{y:.1f}} (시작=100)<br>일자: %{{x|%Y-%m-%d}}<extra></extra>"
                         ),
                         row=1, col=1
                     )
 
         rev_data = []
-        for t in WATCHLIST_TICKERS:
+        for t in wl_tickers:
             if t in eps_df.columns:
                 s = eps_df[t].dropna()
                 r1w = ((s.iloc[-1] / s.iloc[-6]) - 1) * 100.0 if len(s) >= 6 and s.iloc[-6] > 0 else 0.0
@@ -1376,7 +1523,7 @@ def render_watchlist_spotlight_deck(
 
         fig_comp.update_layout(
             **CHART_LAYOUT,
-            height=560,
+            height=580,
             margin=dict(l=10, r=20, t=36, b=20),
             legend=dict(orientation="h", y=1.06, x=0, font=dict(size=10)),
         )
@@ -1663,14 +1810,14 @@ def main():
     TAB_BUBBLE = "🪷  밸류에이션 버블 차트"
     NAV_TABS = [TAB_SCREENER, TAB_DASHBOARD, TAB_BUBBLE]
 
-    WATCHLIST_TICKERS = ["005930", "000660", "402340"]
+    cur_wl = get_user_watchlist()
     all_ticker_map = {}
     for r in all_results:
-        if r.ticker in WATCHLIST_TICKERS:
+        if r.ticker in cur_wl:
             lbl = f"⭐ {r.name} ({r.ticker}) · {r.sector} · {get_strategy_signal(r)}"
             all_ticker_map[lbl] = r.ticker
     for r in all_results:
-        if r.ticker not in WATCHLIST_TICKERS:
+        if r.ticker not in cur_wl:
             lbl = f"{r.name} ({r.ticker}) · {r.sector} · {get_strategy_signal(r)}"
             all_ticker_map[lbl] = r.ticker
 
@@ -1720,44 +1867,34 @@ def main():
             st.session_state["_pending_stock_selector"] = fallback
             st.session_state._last_seen_selector = fallback
 
-    # 핵심 관심종목 (삼성전자, SK하이닉스, SK스퀘어) 스포트라이트 카드 & EPS 추이 심층 분석
+    # 주요 관심종목 (삼성전자, SK하이닉스, SK스퀘어, 알테오젠, HD현대일렉트릭 등) 스포트라이트 카드 & EPS 추이 심층 분석
     render_watchlist_spotlight_deck(
         all_results=all_results,
         eps_df=eps_df,
         names=names,
         markets=markets,
         ticker_to_opt=ticker_to_opt,
+        all_ticker_map=all_ticker_map,
+        all_options=all_options,
     )
 
-    st.markdown("<div style='font-size:0.82rem;color:#94a3b8;margin-top:14px;margin-bottom:6px;font-weight:600;'>⚡ <b>1-Click 관심종목 바로가기:</b></div>", unsafe_allow_html=True)
-    qc1, qc2, qc3, qc_rest = st.columns([1, 1, 1, 2.5])
-    with qc1:
-        if st.button("⭐ 삼성전자", key="quick_pick_005930", use_container_width=True):
-            st.session_state.sel_ticker = "005930"
-            st.session_state._last_seen_sel_ticker = "005930"
-            st.session_state._synced_ticker = "005930"
-            st.session_state["_pending_nav_tab"] = TAB_DASHBOARD
-            if "005930" in ticker_to_opt:
-                st.session_state["_pending_stock_selector"] = ticker_to_opt["005930"]
-            st.rerun()
-    with qc2:
-        if st.button("⭐ SK하이닉스", key="quick_pick_000660", use_container_width=True):
-            st.session_state.sel_ticker = "000660"
-            st.session_state._last_seen_sel_ticker = "000660"
-            st.session_state._synced_ticker = "000660"
-            st.session_state["_pending_nav_tab"] = TAB_DASHBOARD
-            if "000660" in ticker_to_opt:
-                st.session_state["_pending_stock_selector"] = ticker_to_opt["000660"]
-            st.rerun()
-    with qc3:
-        if st.button("⭐ SK스퀘어", key="quick_pick_402340", use_container_width=True):
-            st.session_state.sel_ticker = "402340"
-            st.session_state._last_seen_sel_ticker = "402340"
-            st.session_state._synced_ticker = "402340"
-            st.session_state["_pending_nav_tab"] = TAB_DASHBOARD
-            if "402340" in ticker_to_opt:
-                st.session_state["_pending_stock_selector"] = ticker_to_opt["402340"]
-            st.rerun()
+    st.markdown(
+        f"<div style='font-size:0.82rem;color:#94a3b8;margin-top:14px;margin-bottom:6px;font-weight:600;'>"
+        f"⚡ <b>1-Click 주요 관심종목 바로가기 ({len(cur_wl)}개사):</b></div>",
+        unsafe_allow_html=True,
+    )
+    qp_cols = st.columns(min(max(len(cur_wl), 1), 6))
+    for idx_t, t in enumerate(cur_wl[:6]):
+        t_name = names.get(t, t)
+        with qp_cols[idx_t]:
+            if st.button(f"⭐ {t_name}", key=f"quick_pick_{t}", use_container_width=True):
+                st.session_state.sel_ticker = t
+                st.session_state._last_seen_sel_ticker = t
+                st.session_state._synced_ticker = t
+                st.session_state["_pending_nav_tab"] = TAB_DASHBOARD
+                if t in ticker_to_opt:
+                    st.session_state["_pending_stock_selector"] = ticker_to_opt[t]
+                st.rerun()
 
     # 4) Dynamic Key Versioning & 사전 지연 반영 패턴을 적용한 안전한 검색창
     if "_search_input_version" not in st.session_state:
@@ -1848,6 +1985,15 @@ def main():
                             st.session_state["_pending_stock_selector"] = opt_candidate
                         st.rerun()
 
+                    m_in_wl = m.ticker in cur_wl
+                    if st.button("⭐ 관심등록됨 (클릭 해제)" if m_in_wl else "☆ 관심종목 추가", key=f"btn_wl_search_{m.ticker}", use_container_width=True):
+                        if m_in_wl:
+                            new_wl = [t for t in cur_wl if t != m.ticker]
+                        else:
+                            new_wl = cur_wl + [m.ticker]
+                        save_user_watchlist(new_wl)
+                        st.rerun()
+
     # 인라인 상세 분석 뷰 (선택된 종목이 있을 때 검색 영역 하단에 즉시 표출)
     if st.session_state.sel_ticker:
         target_inline = next((x for x in all_results if x.ticker == st.session_state.sel_ticker), None)
@@ -1903,8 +2049,9 @@ def main():
         if "active_preset" not in st.session_state:
             st.session_state.active_preset = "ALL"
 
+        cur_wl = get_user_watchlist()
         presets = [
-            ("WATCHLIST", "⭐ 핵심 3종목", "삼성전자 · SK하이닉스 · SK스퀘어 집중 스크리닝"),
+            ("WATCHLIST", f"⭐ 내 관심종목 ({len(cur_wl)}개)", "삼성전자 · SK하이닉스 · SK스퀘어 · 알테오젠 · HD현대일렉트릭 등 핵심 관심종목 집중 스크리닝"),
             ("ALL", "🌟 전체 (ALL)", "초기화 및 전체 유니버스 탐색"),
             ("TURNAROUND", "✨ 저평가+실적 반등", "P/E ≤ 40% & 1M EPS 반등 (>0%) & Base 업사이드 ≥ 10%"),
             ("EPS_TOP", "🚀 어닝 상향 Top", "1M EPS Revision ≥ +3% 최상위 모멘텀 Top 25"),
@@ -1926,7 +2073,7 @@ def main():
                 st.rerun()
 
         if not df_table_all.empty:
-            df_preset = apply_quick_preset(df_table_all, st.session_state.active_preset)
+            df_preset = apply_quick_preset(df_table_all, st.session_state.active_preset, custom_tickers=cur_wl)
         else:
             df_preset = df_table_all
 

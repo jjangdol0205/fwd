@@ -749,10 +749,15 @@ def run_screener(
     return results
 
 
-def apply_quick_preset(df: pd.DataFrame, preset_key: str) -> pd.DataFrame:
+def apply_quick_preset(
+    df: pd.DataFrame,
+    preset_key: str,
+    custom_tickers: Optional[Any] = None,
+) -> pd.DataFrame:
     """
     애널리스트 퀵 전략 스크리닝 프리셋 필터 적용 (R4 / Feature 13 / AC 39)
       - 'ALL': 전체 종목 반환
+      - 'WATCHLIST': 핵심 관심종목 집중 스크리닝 (삼성전자, SK하이닉스, SK스퀘어, 알테오젠, HD현대일렉트릭 등)
       - 'TURNAROUND': (pe_pct <= 40 | sector_pe_pct <= 40) & (eps_rev_1m > 0) & (upside_base >= 10.0)
       - 'EPS_TOP': eps_rev_1m >= 3.0 & current_eps > 0 (eps_rev_1m 기준 내림차순 정렬 상위 25종목)
       - 'VALUE': pe_pct <= 25 & eps_rev_1m >= -2.0 & (0.0 < current_fwd_pe <= 15.0) & upside_base >= 15.0
@@ -766,12 +771,24 @@ def apply_quick_preset(df: pd.DataFrame, preset_key: str) -> pd.DataFrame:
         return df.copy()
 
     if key in ("WATCHLIST", "CORE", "FAVORITE", "TOP_PICK"):
-        target_tickers = {"005930", "000660", "402340"}
+        if custom_tickers is not None:
+            target_tickers = [str(x).replace("A", "").zfill(6) for x in custom_tickers if str(x).strip()]
+        else:
+            try:
+                p = Path(__file__).resolve().parent.parent / "data" / "user_watchlist.json"
+                if p.exists():
+                    target_tickers = json.loads(p.read_text(encoding="utf-8"))
+                else:
+                    target_tickers = ["005930", "000660", "402340", "196170", "267260"]
+            except Exception:
+                target_tickers = ["005930", "000660", "402340", "196170", "267260"]
+
+        target_set = set(target_tickers)
         col_t = "코드" if "코드" in df.columns else ("ticker" if "ticker" in df.columns else None)
         if col_t is not None:
-            mask = df[col_t].astype(str).str.replace("A", "").str.zfill(6).isin(target_tickers)
+            mask = df[col_t].astype(str).str.replace("A", "").str.zfill(6).isin(target_set)
             sub = df[mask].copy()
-            order_map = {"005930": 0, "000660": 1, "402340": 2}
+            order_map = {t: i for i, t in enumerate(target_tickers)}
             sub["_w_order"] = sub[col_t].astype(str).str.replace("A", "").str.zfill(6).map(order_map).fillna(99)
             sub = sub.sort_values(by="_w_order").drop(columns=["_w_order"])
             return sub
